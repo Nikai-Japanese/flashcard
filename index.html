@@ -280,17 +280,19 @@
     let tapTimer = null;
     let toastTimer = null;
 
-    // 紙めくり制御用（どこを触っても綺麗な統一角度でめくれる）
-    const UNIFORM_CURL_ANGLE = -0.22;
+    // 紙めくり制御用
     let startX = 0;
     let startY = 0;
     let lastX = 0;
+    let lastY = 0;
     let dragStartTime = 0;
     let isDragging = false;
     let swipeDirection = null; // "left" | "right" | null
     let justSwiped = false;
     let pendingNextDeck = null;
+    let activeCurlAngle = -0.22;
     let currentProgress = 0; // 0 = 平ら, 1 = 完全にめくれた状態
+    let dragFramePending = false;
     let animFrameId = null;
     let pendingCommit = null;
 
@@ -412,7 +414,6 @@
         if (proj > sMax) sMax = proj;
       }
 
-      // p=0 で完全に平ら、p=1 で左端まで完全にめくれ切る
       const s = sMax - p * (sMax - sMin);
       const Mx = s * nx;
       const My = s * ny;
@@ -441,7 +442,6 @@
         pageBack.style.clipPath = cpBack;
         pageBack.style.webkitClipPath = cpBack;
 
-        // 折り目線に対する2D鏡面反転行列
         const a = 1 - 2 * nx * nx;
         const b = -2 * nx * ny;
         const c = -2 * nx * ny;
@@ -459,6 +459,17 @@
       castShadow.style.opacity = Math.min(1, p * 4, (1 - p) * 4).toFixed(2);
     }
 
+    function scheduleDragRender() {
+      if (dragFramePending) return;
+      dragFramePending = true;
+      requestAnimationFrame(() => {
+        dragFramePending = false;
+        if (isDragging && swipeDirection) {
+          renderCurl(currentProgress, activeCurlAngle);
+        }
+      });
+    }
+
     function resetFlatVisuals() {
       cardFront.style.clipPath = "";
       cardFront.style.webkitClipPath = "";
@@ -470,6 +481,7 @@
     }
 
     function flushPendingFlip() {
+      dragFramePending = false;
       if (animFrameId) {
         cancelAnimationFrame(animFrameId);
         animFrameId = null;
@@ -489,7 +501,7 @@
         const ease = 1 - Math.pow(1 - t, 3);
         const p = fromP + (toP - fromP) * ease;
         currentProgress = p;
-        renderCurl(p, UNIFORM_CURL_ANGLE);
+        renderCurl(p, activeCurlAngle);
 
         if (t < 1) {
           animFrameId = requestAnimationFrame(step);
@@ -537,6 +549,7 @@
       startX = e.clientX;
       startY = e.clientY;
       lastX = e.clientX;
+      lastY = e.clientY;
       dragStartTime = performance.now();
       isDragging = true;
       swipeDirection = null;
@@ -551,14 +564,28 @@
     cardFront.addEventListener("pointermove", (e) => {
       if (!isDragging || !isStarted) return;
       lastX = e.clientX;
+      lastY = e.clientY;
       const diffX = e.clientX - startX;
       const diffY = e.clientY - startY;
 
-      if (!swipeDirection) {
-        // 横方向への明確なスワイプを検知してからめくり始める
-        if (Math.abs(diffX) <= 14 || Math.abs(diffX) < Math.abs(diffY) * 0.9) return;
+      const rect = cardStage.getBoundingClientRect();
 
-        swipeDirection = diffX < 0 ? "left" : "right";
+      if (!swipeDirection) {
+        if (Math.hypot(diffX, diffY) <= 12) return;
+
+        // 明確な右スワイプだけ「戻る」、左や上斜めの動きは「次へ」として安定させる
+        if (diffX > 14 && diffX > Math.abs(diffY) * 0.85) {
+          swipeDirection = "right";
+        } else if (diffX < -10 || diffY < -14) {
+          swipeDirection = "left";
+        } else {
+          return;
+        }
+
+        // 上側を触れば上から、下側を触れば下から同じ大きさの角度(±0.22)で綺麗にめくる
+        const relY = (startY - rect.top) / rect.height;
+        activeCurlAngle = relY >= 0.5 ? 0.22 : -0.22;
+
         cardBack.style.display = "flex";
 
         if (swipeDirection === "left") {
@@ -571,21 +598,23 @@
         }
       }
 
-      const rect = cardStage.getBoundingClientRect();
       const dragSpan = Math.max(220, rect.width * 0.92);
 
       if (swipeDirection === "left") {
-        currentProgress = Math.max(0, Math.min(0.98, -diffX / dragSpan));
+        // 左スワイプでも下から上斜めへのスワイプでも滑らかにめくれる
+        const effectiveDrag = Math.max(-diffX, -diffY * 0.65);
+        currentProgress = Math.max(0, Math.min(0.98, effectiveDrag / dragSpan));
       } else {
         currentProgress = Math.max(0.02, Math.min(1, 1 - diffX / dragSpan));
       }
 
-      renderCurl(currentProgress, UNIFORM_CURL_ANGLE);
+      scheduleDragRender();
     });
 
     function finishDrag(isCancelled) {
       if (!isDragging) return;
       isDragging = false;
+      dragFramePending = false;
 
       if (!swipeDirection) return;
 
@@ -595,12 +624,15 @@
       }, 90);
 
       const diffX = lastX - startX;
+      const diffY = lastY - startY;
       const elapsed = Math.max(1, performance.now() - dragStartTime);
-      const velocity = Math.abs(diffX) / elapsed;
-      const isQuickFlick = !isCancelled && velocity > 0.35 && Math.abs(diffX) > 25;
 
       if (swipeDirection === "left") {
-        if (!isCancelled && (diffX < -55 || (diffX < 0 && isQuickFlick))) {
+        const effectiveDrag = Math.max(-diffX, -diffY * 0.65);
+        const velocity = effectiveDrag / elapsed;
+        const isQuickFlick = !isCancelled && velocity > 0.35 && effectiveDrag > 22;
+
+        if (!isCancelled && (effectiveDrag > 52 || isQuickFlick)) {
           const next = getNextData();
           animateCurl(currentProgress, 1, 280, () => {
             if (next.newDeck) colors = next.newDeck;
@@ -617,7 +649,10 @@
           });
         }
       } else {
-        if (!isCancelled && (diffX > 55 || (diffX > 0 && isQuickFlick))) {
+        const velocity = diffX / elapsed;
+        const isQuickFlick = !isCancelled && velocity > 0.35 && diffX > 25;
+
+        if (!isCancelled && (diffX > 55 || isQuickFlick)) {
           const prevIdx = getPrevIndex();
           animateCurl(currentProgress, 0, 280, () => {
             currentIndex = prevIdx;
@@ -636,6 +671,7 @@
 
     cardFront.addEventListener("pointerup", (e) => {
       lastX = e.clientX;
+      lastY = e.clientY;
       finishDrag(false);
     });
 
