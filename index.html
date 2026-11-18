@@ -14,32 +14,20 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      /* 白と黒のどちらとも被らない、プロ仕様のミディアム・スレートグレー背景 */
       background: radial-gradient(circle at top, #cbd5e1 0%, #94a3b8 100%);
       display: flex;
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
-      color: #1e293b;
     }
 
-    /* 上部のカウンター */
-    .header {
-      text-align: center;
-      padding: 14px;
-      font-size: 1rem;
-      font-weight: 700;
-      letter-spacing: 2px;
-      color: #334155;
-    }
-
-    /* メインのカードエリア */
+    /* メインのカードエリア（上部の余白もバランスよく調整） */
     .card-container {
       flex: 1;
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 0 24px;
+      padding: 28px 24px 0;
       min-height: 0;
     }
 
@@ -47,7 +35,7 @@
       width: 100%;
       max-width: 650px;
       height: 100%;
-      max-height: 550px;
+      max-height: 580px;
       border-radius: 28px;
       box-shadow: 
         0 18px 36px rgba(15, 23, 42, 0.22),
@@ -66,7 +54,7 @@
 
     /* 答えのテキスト */
     .indonesian-word {
-      font-size: 4.2rem;
+      font-size: 4.5rem;
       font-weight: 800;
       letter-spacing: 2px;
       text-align: center;
@@ -88,7 +76,7 @@
       justify-content: center;
       align-items: center;
       gap: 48px;
-      padding: 22px 20px 32px;
+      padding: 24px 20px 32px;
     }
 
     .nav-btn {
@@ -120,12 +108,11 @@
 
     /* 横向き（ランドスケープ）時のレイアウト調整 */
     @media (orientation: landscape) and (max-height: 500px) {
-      .header {
-        padding: 8px;
-        font-size: 0.9rem;
+      .card-container {
+        padding: 16px 24px 0;
       }
       .controls {
-        padding: 12px 20px 16px;
+        padding: 14px 20px 16px;
         gap: 60px;
       }
       .nav-btn {
@@ -134,14 +121,12 @@
         font-size: 1.4rem;
       }
       .indonesian-word {
-        font-size: 3.4rem;
+        font-size: 3.6rem;
       }
     }
   </style>
 </head>
 <body>
-
-  <div class="header" id="counter">TAP</div>
 
   <div class="card-container">
     <div class="card" id="card" style="background-color: #64748b;">
@@ -182,7 +167,6 @@
     let isAnswerShown = false;
 
     const card = document.getElementById("card");
-    const counter = document.getElementById("counter");
     const indoText = document.getElementById("indo-text");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
@@ -190,10 +174,8 @@
     function updateCard() {
       const current = colors[currentIndex];
       
-      counter.textContent = `${currentIndex + 1} / ${colors.length}`;
       card.style.backgroundColor = current.hex;
 
-      // 白と黒の時は輪郭がよりくっきり見えるように枠の光彩を調整
       if (current.indo === "Putih") {
         card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
       } else if (current.indo === "Hitam") {
@@ -232,7 +214,11 @@
 
     nextBtn.addEventListener("click", () => {
       if (!isStarted) isStarted = true;
-      currentIndex = (currentIndex + 1) % colors.length;
+      currentIndex++;
+      if (currentIndex >= colors.length) {
+        colors = shuffleArray(baseColors); // 1周したら再度シャッフル
+        currentIndex = 0;
+      }
       isAnswerShown = false;
       updateCard();
     });
