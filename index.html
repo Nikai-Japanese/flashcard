@@ -96,14 +96,13 @@
       text-align: center;
       opacity: 0;
       visibility: hidden;
-      transition: none;
+      transition: opacity 0.2s ease; /* 練習モード時のスムーズな切り替え用 */
       pointer-events: none;
     }
 
     .indonesian-word.visible {
       opacity: 1;
       visibility: visible;
-      transition: opacity 0.2s ease;
     }
 
     /* 下部の矢印ボタンエリア */
@@ -207,9 +206,9 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true; // 初期状態は練習モード
+    let isPracticeMode = true;
 
-    // 3回タップ検知用の変数
+    // 3回タップ検知用の変数（遅延判定を0.3秒に短縮して反応を高速化）
     let tapCount = 0;
     let tapTimer = null;
 
@@ -252,6 +251,13 @@
       indoText.textContent = current.indo;
       indoText.style.color = current.textColor;
 
+      // テストモード時はアニメーションを無効化してラグを完全に排除
+      if (!isPracticeMode) {
+        indoText.style.transition = 'none';
+      } else {
+        indoText.style.transition = 'opacity 0.2s ease';
+      }
+
       if (isAnswerShown) {
         indoText.classList.add("visible");
       } else {
@@ -266,7 +272,7 @@
         return;
       }
 
-      // 3回タップのカウント処理
+      // 3回タップのカウント処理（判定を0.3秒にしてキビキビ動作）
       tapCount++;
       if (tapCount === 1) {
         tapTimer = setTimeout(() => {
@@ -274,11 +280,11 @@
             handleNormalTap();
           }
           tapCount = 0;
-        }, 400);
+        }, 300);
       } else if (tapCount === 3) {
         clearTimeout(tapTimer);
         tapCount = 0;
-        toggleSecretMode(); // 3回タップ達成でシークレット切り替え！
+        toggleSecretMode();
       }
     });
 
@@ -297,15 +303,15 @@
       }
     }
 
-    // シークレットモード切り替え（英語表記）
+    // シークレットモード切り替え
     function toggleSecretMode() {
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
         isAnswerShown = true;
-        showToast("🔓✨ Practice Mode");
+        showToast("🔓✨ Practice Mode (Unlocked)");
       } else {
         isAnswerShown = false;
-        showToast("🔒 Test Mode");
+        showToast("🔒 Test Mode (Locked)");
       }
       updateCard();
     }
