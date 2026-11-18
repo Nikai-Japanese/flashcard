@@ -150,7 +150,7 @@
       bottom: 0;
       left: 0;
       width: 100%;
-      height: 24px; /* 下端の触りやすい高さ */
+      height: 30px;
       background: transparent;
       z-index: 10;
       cursor: default;
@@ -319,10 +319,9 @@
       }
     }
 
-    // スマホ・PCどちらでも確実なタッチ・クリックに対応
+    // ポインティングデバイス・タッチ両方で確実に動くよう登録
     secretBar.addEventListener("click", handleSecretTap);
     secretBar.addEventListener("touchend", (e) => {
-      e.preventDefault(); // スマホでの二重発火やズームを防止
       handleSecretTap(e);
     });
 
@@ -368,7 +367,7 @@
       if (currentIndex >= colors.length) {
         currentIndex = 0;
         if (!isPracticeMode) {
-          colors = shuffleArray(baseCoins); // 誤字修正用安全策
+          colors = shuffleArray(baseColors); // 正しい変数名に修正済み
         }
       }
       isAnswerShown = isPracticeMode;
