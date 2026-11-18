@@ -57,14 +57,12 @@
       min-height: 0;
     }
 
-    /* 2枚のカードを重ねて3D空間を作るステージ */
     .card-stage {
       position: relative;
       width: 100%;
       max-width: 650px;
       height: 100%;
       max-height: 620px;
-      perspective: 1400px;
     }
 
     .card {
@@ -80,9 +78,7 @@
       cursor: pointer;
       user-select: none;
       touch-action: none;
-      transform-origin: left center;
-      backface-visibility: hidden;
-      -webkit-backface-visibility: hidden;
+      overflow: hidden;
     }
 
     .card-back {
@@ -93,6 +89,75 @@
 
     .card-front {
       z-index: 2;
+    }
+
+    /* めくれた紙の裏面レイヤー */
+    .page-back {
+      position: absolute;
+      inset: 0;
+      border-radius: 28px;
+      background-color: #f8fafc;
+      z-index: 3;
+      display: none;
+      pointer-events: none;
+      transform-origin: 0 0;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
+    }
+
+    /* 紙の丸み・光沢を表現するグラデーション帯 */
+    .page-back-shade {
+      position: absolute;
+      left: 0;
+      top: -1200px;
+      width: 700px;
+      height: 2400px;
+      transform-origin: 0 1200px;
+      background: linear-gradient(
+        to right,
+        rgba(15, 23, 42, 0.24) 0px,
+        rgba(255, 255, 255, 0.98) 18px,
+        rgba(241, 245, 249, 0.96) 52px,
+        rgba(226, 232, 240, 0.98) 140px,
+        rgba(203, 213, 225, 1) 100%
+      );
+      pointer-events: none;
+    }
+
+    /* めくれた紙が下のページに落とす影 */
+    .cast-shadow {
+      position: absolute;
+      left: 0;
+      top: -1200px;
+      width: 130px;
+      height: 2400px;
+      transform-origin: 0 1200px;
+      background: linear-gradient(
+        to right,
+        rgba(15, 23, 42, 0.36) 0px,
+        rgba(15, 23, 42, 0.14) 36px,
+        rgba(15, 23, 42, 0) 120px
+      );
+      pointer-events: none;
+      display: none;
+    }
+
+    /* 表ページ側の折り目付近の影 */
+    .front-crease {
+      position: absolute;
+      left: -60px;
+      top: -1200px;
+      width: 60px;
+      height: 2400px;
+      transform-origin: 60px 1200px;
+      background: linear-gradient(
+        to right,
+        rgba(15, 23, 42, 0) 0px,
+        rgba(15, 23, 42, 0.08) 38px,
+        rgba(15, 23, 42, 0.22) 60px
+      );
+      pointer-events: none;
+      display: none;
     }
 
     /* 最初の画面の大きな「TAP」表示 */
@@ -161,16 +226,23 @@
   <div class="secret-trigger-bar" id="secret-bar"></div>
 
   <div class="card-container">
-    <div class="card-stage">
-      <!-- 下に控えるカード -->
+    <div class="card-stage" id="card-stage">
+      <!-- 下のページ（次の色） -->
       <div class="card card-back" id="card-back">
         <div class="indonesian-word" id="indo-text-back"></div>
+        <div class="cast-shadow" id="cast-shadow"></div>
       </div>
 
-      <!-- 手前でめくれるカード -->
+      <!-- 手前のページ（現在の色） -->
       <div class="card card-front" id="card-front">
         <div class="start-tap" id="start-tap">TAP</div>
         <div class="indonesian-word" id="indo-text-front"></div>
+        <div class="front-crease" id="front-crease"></div>
+      </div>
+
+      <!-- めくれて折り返された紙の裏面 -->
+      <div class="page-back" id="page-back">
+        <div class="page-back-shade" id="page-back-shade"></div>
       </div>
     </div>
   </div>
@@ -208,17 +280,26 @@
     let tapTimer = null;
     let toastTimer = null;
 
-    // 本めくり（スワイプ）制御用
+    // 紙めくり制御用
     let startX = 0;
+    let startY = 0;
+    let dragStartTime = 0;
     let isDragging = false;
     let swipeDirection = null; // "left" | "right" | null
     let justSwiped = false;
     let pendingNextDeck = null;
-    let flipTimeout = null;
+    let curlAngle = 0.2;
+    let currentProgress = 0; // 0 = 平ら, 1 = 完全にめくれた状態
+    let animFrameId = null;
     let pendingCommit = null;
 
+    const cardStage = document.getElementById("card-stage");
     const cardFront = document.getElementById("card-front");
     const cardBack = document.getElementById("card-back");
+    const pageBack = document.getElementById("page-back");
+    const pageBackShade = document.getElementById("page-back-shade");
+    const castShadow = document.getElementById("cast-shadow");
+    const frontCrease = document.getElementById("front-crease");
     const startTap = document.getElementById("start-tap");
     const indoTextFront = document.getElementById("indo-text-front");
     const indoTextBack = document.getElementById("indo-text-back");
@@ -266,15 +347,161 @@
       );
     }
 
+    // 半平面で四角形を切り抜く（Sutherland-Hodgman）
+    function clipPolygon(poly, nx, ny, s, keepLeft) {
+      const out = [];
+      const sign = keepLeft ? -1 : 1;
+      for (let i = 0; i < poly.length; i++) {
+        const A = poly[i];
+        const B = poly[(i + 1) % poly.length];
+        const dA = (A.x * nx + A.y * ny - s) * sign;
+        const dB = (B.x * nx + B.y * ny - s) * sign;
+        const inA = dA >= -1e-5;
+        const inB = dB >= -1e-5;
+
+        if (inA && inB) {
+          out.push(B);
+        } else if (inA && !inB) {
+          const t = dA / (dA - dB);
+          out.push({ x: A.x + t * (B.x - A.x), y: A.y + t * (B.y - A.y) });
+        } else if (!inA && inB) {
+          const t = dA / (dA - dB);
+          out.push({ x: A.x + t * (B.x - A.x), y: A.y + t * (B.y - A.y) });
+          out.push(B);
+        }
+      }
+      return out;
+    }
+
+    function toClipPath(poly) {
+      if (poly.length < 3) return "polygon(0 0, 0 0, 0 0)";
+      return "polygon(" + poly.map(pt => `${pt.x.toFixed(1)}px ${pt.y.toFixed(1)}px`).join(", ") + ")";
+    }
+
+    // めくれ具合 p (0〜1) に応じて、表・裏・影の幾何学をリアルタイム描画
+    function renderCurl(p, angle) {
+      const W = cardStage.offsetWidth;
+      const H = cardStage.offsetHeight;
+
+      if (p <= 0.001) {
+        cardFront.style.clipPath = "";
+        cardFront.style.webkitClipPath = "";
+        cardFront.style.visibility = "visible";
+        pageBack.style.display = "none";
+        castShadow.style.display = "none";
+        frontCrease.style.display = "none";
+        return;
+      }
+
+      const nx = Math.cos(angle);
+      const ny = Math.sin(angle);
+
+      const corners = [
+        { x: 0, y: 0 },
+        { x: W, y: 0 },
+        { x: W, y: H },
+        { x: 0, y: H }
+      ];
+
+      let sMin = Infinity;
+      let sMax = -Infinity;
+      for (const c of corners) {
+        const proj = c.x * nx + c.y * ny;
+        if (proj < sMin) sMin = proj;
+        if (proj > sMax) sMax = proj;
+      }
+
+      // p=0 で完全に平ら、p=1 で左端まで完全にめくれ切る
+      const s = sMax - p * (sMax - sMin);
+      const Mx = s * nx;
+      const My = s * ny;
+      const angleDeg = (angle * 180) / Math.PI;
+
+      // 1. 手前カード（折り目より左側だけ残す）
+      const frontPoly = clipPolygon(corners, nx, ny, s, true);
+      if (frontPoly.length < 3) {
+        cardFront.style.visibility = "hidden";
+      } else {
+        cardFront.style.visibility = "visible";
+        const cp = toClipPath(frontPoly);
+        cardFront.style.clipPath = cp;
+        cardFront.style.webkitClipPath = cp;
+        frontCrease.style.display = "block";
+        frontCrease.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
+      }
+
+      // 2. めくれた紙の裏面（折り目より右側を切り取り、折り目で鏡面反転）
+      const backPoly = clipPolygon(corners, nx, ny, s, false);
+      if (backPoly.length < 3 || p >= 0.999) {
+        pageBack.style.display = "none";
+      } else {
+        pageBack.style.display = "block";
+        const cpBack = toClipPath(backPoly);
+        pageBack.style.clipPath = cpBack;
+        pageBack.style.webkitClipPath = cpBack;
+
+        // 折り目線に対する2D鏡面反転行列
+        const a = 1 - 2 * nx * nx;
+        const b = -2 * nx * ny;
+        const c = -2 * nx * ny;
+        const d = 1 - 2 * ny * ny;
+        const tx = 2 * s * nx;
+        const ty = 2 * s * ny;
+
+        pageBack.style.transform = `matrix(${a.toFixed(5)}, ${b.toFixed(5)}, ${c.toFixed(5)}, ${d.toFixed(5)}, ${tx.toFixed(1)}, ${ty.toFixed(1)})`;
+        pageBackShade.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
+      }
+
+      // 3. 下のページに落ちる影
+      castShadow.style.display = "block";
+      castShadow.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
+      castShadow.style.opacity = Math.min(1, p * 4, (1 - p) * 4).toFixed(2);
+    }
+
+    function resetFlatVisuals() {
+      cardFront.style.clipPath = "";
+      cardFront.style.webkitClipPath = "";
+      cardFront.style.visibility = "visible";
+      frontCrease.style.display = "none";
+      pageBack.style.display = "none";
+      castShadow.style.display = "none";
+      cardBack.style.display = "none";
+    }
+
     function flushPendingFlip() {
-      if (flipTimeout) {
-        clearTimeout(flipTimeout);
-        flipTimeout = null;
+      if (animFrameId) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
       }
       if (pendingCommit) {
         pendingCommit();
         pendingCommit = null;
       }
+    }
+
+    function animateCurl(fromP, toP, duration, onComplete) {
+      pendingCommit = onComplete;
+      const startTime = performance.now();
+
+      function step(now) {
+        const t = Math.min(1, (now - startTime) / duration);
+        // なめらかな減速イージング
+        const ease = 1 - Math.pow(1 - t, 3);
+        const p = fromP + (toP - fromP) * ease;
+        currentProgress = p;
+        renderCurl(p, curlAngle);
+
+        if (t < 1) {
+          animFrameId = requestAnimationFrame(step);
+        } else {
+          animFrameId = null;
+          const commit = pendingCommit;
+          pendingCommit = null;
+          if (commit) commit();
+        }
+      }
+
+      animFrameId = requestAnimationFrame(step);
     }
 
     function startQuiz() {
@@ -304,16 +531,16 @@
       return (currentIndex - 1 + colors.length) % colors.length;
     }
 
-    // 【本のページめくり操作】
+    // 【指でのページめくり操作】
     cardFront.addEventListener("pointerdown", (e) => {
       flushPendingFlip();
       startX = e.clientX;
+      startY = e.clientY;
+      dragStartTime = performance.now();
       isDragging = true;
       swipeDirection = null;
       pendingNextDeck = null;
-
-      cardFront.style.transition = "none";
-      cardBack.style.transition = "none";
+      currentProgress = 0;
     });
 
     cardFront.addEventListener("pointermove", (e) => {
@@ -322,10 +549,19 @@
 
       if (Math.abs(diffX) <= 10 && !swipeDirection) return;
 
-      // スワイプ方向が確定した瞬間に下のカードを準備
+      const rect = cardStage.getBoundingClientRect();
+
       if (!swipeDirection) {
         swipeDirection = diffX < 0 ? "left" : "right";
         cardBack.style.display = "flex";
+
+        // 指を置いた高さに応じて自然に折り目の角度を決める
+        const relY = Math.max(0, Math.min(1, (startY - rect.top) / rect.height));
+        if (relY >= 0.5) {
+          curlAngle = 0.16 + (relY - 0.5) * 0.42;
+        } else {
+          curlAngle = -0.16 - (0.5 - relY) * 0.42;
+        }
 
         if (swipeDirection === "left") {
           const next = getNextData();
@@ -337,28 +573,14 @@
         }
       }
 
-      const stageWidth = cardFront.offsetWidth || 320;
-      const maxDrag = Math.min(stageWidth * 0.78, 280);
-
+      const dragSpan = Math.max(220, rect.width * 0.92);
       if (swipeDirection === "left") {
-        // 今のページを左へめくる (0deg -> -100deg)
-        const progress = Math.min(1, Math.max(0, -diffX) / maxDrag);
-        const angle = -progress * 100;
-        const opacity = progress > 0.72 ? Math.max(0, 1 - (progress - 0.72) / 0.28) : 1;
-
-        cardFront.style.transform = `rotateY(${angle}deg)`;
-        cardFront.style.opacity = opacity;
-        cardBack.style.filter = `brightness(${0.82 + 0.18 * progress})`;
+        currentProgress = Math.max(0, Math.min(0.98, -diffX / dragSpan));
       } else {
-        // 前のページを左から開いて戻す (-95deg -> 0deg)
-        const progress = Math.min(1, Math.max(0, diffX) / maxDrag);
-        const angle = -95 + progress * 95;
-        const opacity = Math.min(1, progress * 3.5);
-
-        cardFront.style.transform = `rotateY(${angle}deg)`;
-        cardFront.style.opacity = opacity;
-        cardBack.style.filter = `brightness(${1 - 0.18 * progress})`;
+        currentProgress = Math.max(0.02, Math.min(1, 1 - diffX / dragSpan));
       }
+
+      renderCurl(currentProgress, curlAngle);
     });
 
     function endDrag(e) {
@@ -373,80 +595,43 @@
       }, 90);
 
       const diffX = e.clientX - startX;
-      const threshold = 55;
-
-      cardFront.style.transition = "transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease";
-      cardBack.style.transition = "filter 0.28s ease";
+      const elapsed = Math.max(1, performance.now() - dragStartTime);
+      const velocity = Math.abs(diffX) / elapsed;
+      const isQuickFlick = velocity > 0.35 && Math.abs(diffX) > 25;
 
       if (swipeDirection === "left") {
-        if (diffX < -threshold) {
-          // めくり完了 → 次の色へ
+        if (diffX < -55 || (diffX < 0 && isQuickFlick)) {
           const next = getNextData();
-          cardFront.style.transform = "rotateY(-105deg)";
-          cardFront.style.opacity = "0";
-          cardBack.style.filter = "brightness(1)";
-
-          pendingCommit = () => {
+          animateCurl(currentProgress, 1, 280, () => {
             if (next.newDeck) colors = next.newDeck;
             pendingNextDeck = null;
             currentIndex = next.nextIdx;
             isAnswerShown = isPracticeMode;
-
-            cardFront.style.transition = "none";
-            cardFront.style.transform = "rotateY(0deg)";
-            cardFront.style.opacity = "1";
             updateFrontCard();
-            cardBack.style.display = "none";
-            cardBack.style.filter = "brightness(1)";
-          };
+            resetFlatVisuals();
+          });
         } else {
-          // キャンセル → 元の色に戻る
-          cardFront.style.transform = "rotateY(0deg)";
-          cardFront.style.opacity = "1";
-          cardBack.style.filter = "brightness(0.82)";
-
-          pendingCommit = () => {
+          animateCurl(currentProgress, 0, 200, () => {
             pendingNextDeck = null;
-            cardBack.style.display = "none";
-            cardBack.style.filter = "brightness(1)";
-          };
+            resetFlatVisuals();
+          });
         }
       } else {
-        if (diffX > threshold) {
-          // 戻し完了 → 前の色へ
+        if (diffX > 55 || (diffX > 0 && isQuickFlick)) {
           const prevIdx = getPrevIndex();
-          cardFront.style.transform = "rotateY(0deg)";
-          cardFront.style.opacity = "1";
-          cardBack.style.filter = "brightness(0.82)";
-
-          pendingCommit = () => {
+          animateCurl(currentProgress, 0, 280, () => {
             currentIndex = prevIdx;
             isAnswerShown = isPracticeMode;
-
-            cardFront.style.transition = "none";
             updateFrontCard();
-            cardBack.style.display = "none";
-            cardBack.style.filter = "brightness(1)";
-          };
+            resetFlatVisuals();
+          });
         } else {
-          // キャンセル → 元の色に戻る
-          cardFront.style.transform = "rotateY(-95deg)";
-          cardFront.style.opacity = "0";
-          cardBack.style.filter = "brightness(1)";
-
-          pendingCommit = () => {
-            cardFront.style.transition = "none";
-            cardFront.style.transform = "rotateY(0deg)";
-            cardFront.style.opacity = "1";
+          animateCurl(currentProgress, 1, 200, () => {
             updateFrontCard();
-            cardBack.style.display = "none";
-          };
+            resetFlatVisuals();
+          });
         }
       }
-
-      flipTimeout = setTimeout(() => {
-        flushPendingFlip();
-      }, 280);
     }
 
     cardFront.addEventListener("pointerup", endDrag);
@@ -487,6 +672,7 @@
     // シークレットモード切り替え
     function toggleSecretMode() {
       flushPendingFlip();
+      resetFlatVisuals();
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
         colors = [...baseColors];
