@@ -167,7 +167,7 @@
 </head>
 <body>
 
-  <div class="toast" id="toast">モード切替</div>
+  <div class="toast" id="toast">Mode Switch</div>
 
   <div class="card-container">
     <div class="card" id="card">
@@ -297,15 +297,15 @@
       }
     }
 
-    // シークレットモード切り替え（より開き具合がわかる表現に）
+    // シークレットモード切り替え（英語表記）
     function toggleSecretMode() {
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
         isAnswerShown = true;
-        showToast("🔓✨ 練習モード (オープン中)");
+        showToast("🔓✨ Practice Mode");
       } else {
         isAnswerShown = false;
-        showToast("🔒 測試モード (ロック中)");
+        showToast("🔒 Test Mode");
       }
       updateCard();
     }
