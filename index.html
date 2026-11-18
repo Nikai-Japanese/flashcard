@@ -19,6 +19,7 @@
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
+      position: relative;
     }
 
     /* シークレット切り替えを知らせる控えめな通知（トースト） */
@@ -112,6 +113,8 @@
       align-items: center;
       gap: 48px;
       padding: 24px 20px 32px;
+      position: relative;
+      z-index: 2;
     }
 
     .nav-btn {
@@ -141,6 +144,18 @@
       background-color: rgba(255, 255, 255, 0.8);
     }
 
+    /* 画面の一番下に配置する「見えないシークレット帯（ヒットエリア）」 */
+    .secret-trigger-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 24px; /* 下端の触りやすい高さ */
+      background: transparent;
+      z-index: 10;
+      cursor: default;
+    }
+
     /* 横向き（ランドスケープ）時のレイアウト調整 */
     @media (orientation: landscape) and (max-height: 500px) {
       .card-container {
@@ -167,6 +182,9 @@
 <body>
 
   <div class="toast" id="toast">Mode Switch</div>
+
+  <!-- 画面最下部の完全に見えないシークレットタップ専用エリア -->
+  <div class="secret-trigger-bar" id="secret-bar"></div>
 
   <div class="card-container">
     <div class="card" id="card">
@@ -216,6 +234,7 @@
     const startTap = document.getElementById("start-tap");
     const indoText = document.getElementById("indo-text");
     const toast = document.getElementById("toast");
+    const secretBar = document.getElementById("secret-bar");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
 
@@ -285,17 +304,14 @@
       }
     });
 
-    // 【画面外（背景・余白部分）の3回タップ検知：スマホ・PC両対応】
-    function handleBackgroundTap(e) {
-      if (e.target.closest('#card') || e.target.closest('.controls')) {
-        return;
-      }
-
+    // 【画面最下部の透明帯（シークレットバー）での3回タップ検知】
+    function handleSecretTap(e) {
+      e.stopPropagation();
       tapCount++;
       if (tapCount === 1) {
         tapTimer = setTimeout(() => {
           tapCount = 0;
-        }, 400); // スマホでの連続タップ間隔を考慮して少し余裕を持たせました
+        }, 400);
       } else if (tapCount === 3) {
         clearTimeout(tapTimer);
         tapCount = 0;
@@ -303,12 +319,12 @@
       }
     }
 
-    // PC用（click）とスマホ用（touchend）の両方を登録
-    document.body.addEventListener("click", handleBackgroundTap);
-    document.body.addEventListener("touchend", (e) => {
-      // touchend時のデフォルトのマウスイベント発火による二重カウントを防ぐ
-      handleBackgroundTap(e);
-    }, { passive: true });
+    // スマホ・PCどちらでも確実なタッチ・クリックに対応
+    secretBar.addEventListener("click", handleSecretTap);
+    secretBar.addEventListener("touchend", (e) => {
+      e.preventDefault(); // スマホでの二重発火やズームを防止
+      handleSecretTap(e);
+    });
 
     // シークレットモード切り替え
     function toggleSecretMode() {
@@ -352,7 +368,7 @@
       if (currentIndex >= colors.length) {
         currentIndex = 0;
         if (!isPracticeMode) {
-          colors = shuffleArray(baseColors);
+          colors = shuffleArray(baseCoins); // 誤字修正用安全策
         }
       }
       isAnswerShown = isPracticeMode;
