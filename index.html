@@ -291,7 +291,7 @@
       }
     }
 
-    // 【カードの通常のタップ】
+    // 【カードの通常のタップ】両モード共通で文字の表示／非表示を切り替え
     card.addEventListener("click", (e) => {
       e.stopPropagation();
       if (!isStarted) {
@@ -299,17 +299,8 @@
         return;
       }
 
-      if (isPracticeMode) {
-        currentIndex++;
-        if (currentIndex >= colors.length) {
-          currentIndex = 0;
-        }
-        isAnswerShown = isPracticeMode;
-        updateCard();
-      } else {
-        isAnswerShown = !isAnswerShown;
-        updateCard();
-      }
+      isAnswerShown = !isAnswerShown;
+      updateCard();
     });
 
     // 【画面下部の透明帯（シークレットバー）での3回タップ検知】
