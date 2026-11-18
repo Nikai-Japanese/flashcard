@@ -53,8 +53,19 @@
       transform: scale(0.97);
     }
 
-    /* 答えのテキスト（1.5倍サイズ・画面幅に応じてはみ出し防止） */
+    /* 最初の画面の大きな「TAP」表示 */
+    .start-tap {
+      font-size: clamp(4.5rem, 18vw, 7.5rem);
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: rgba(255, 255, 255, 0.92);
+      text-align: center;
+      pointer-events: none;
+    }
+
+    /* 答えのテキスト */
     .indonesian-word {
+      display: none; /* スタート前は非表示 */
       font-size: clamp(3.8rem, 16vw, 6.75rem);
       font-weight: 800;
       letter-spacing: 2px;
@@ -121,6 +132,9 @@
         height: 54px;
         font-size: 1.4rem;
       }
+      .start-tap {
+        font-size: 6rem;
+      }
       .indonesian-word {
         font-size: 5.4rem;
       }
@@ -131,6 +145,7 @@
 
   <div class="card-container">
     <div class="card" id="card" style="background-color: #64748b;">
+      <div class="start-tap" id="start-tap">TAP</div>
       <div class="indonesian-word" id="indo-text"></div>
     </div>
   </div>
@@ -168,9 +183,19 @@
     let isAnswerShown = false;
 
     const card = document.getElementById("card");
+    const startTap = document.getElementById("start-tap");
     const indoText = document.getElementById("indo-text");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
+
+    // スタート状態に切り替える関数
+    function startQuiz() {
+      isStarted = true;
+      startTap.style.display = "none";
+      indoText.style.display = "block";
+      isAnswerShown = false;
+      updateCard();
+    }
 
     function updateCard() {
       const current = colors[currentIndex];
@@ -195,26 +220,33 @@
       }
     }
 
+    // カードタップ時
     card.addEventListener("click", () => {
       if (!isStarted) {
-        isStarted = true;
-        isAnswerShown = false;
-        updateCard();
+        startQuiz();
       } else {
         isAnswerShown = !isAnswerShown;
         updateCard();
       }
     });
 
+    // 戻るボタン
     prevBtn.addEventListener("click", () => {
-      if (!isStarted) isStarted = true;
+      if (!isStarted) {
+        startQuiz();
+        return;
+      }
       currentIndex = (currentIndex - 1 + colors.length) % colors.length;
       isAnswerShown = false;
       updateCard();
     });
 
+    // 次へボタン
     nextBtn.addEventListener("click", () => {
-      if (!isStarted) isStarted = true;
+      if (!isStarted) {
+        startQuiz();
+        return;
+      }
       currentIndex++;
       if (currentIndex >= colors.length) {
         colors = shuffleArray(baseColors);
