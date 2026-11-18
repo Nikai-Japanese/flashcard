@@ -202,11 +202,11 @@
       return arr;
     }
 
-    let colors = shuffleArray(baseColors);
+    let colors = [...baseColors]; // 初期状態は順番通り
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true;
+    let isPracticeMode = true; // 初期状態は練習モード（順番通り）
 
     // 3回タップ検知用の変数（遅延判定を0.3秒に短縮して反応を高速化）
     let tapCount = 0;
@@ -290,26 +290,31 @@
 
     // 通常のタップ動作
     function handleNormalTap() {
-      if (isPracticeMode) {
-        currentIndex++;
-        if (currentIndex >= colors.length) {
+      currentIndex++;
+      if (currentIndex >= colors.length) {
+        currentIndex = 0;
+        // テストモード時のみ、一周したら再度シャッフルする
+        if (!isPracticeMode) {
           colors = shuffleArray(baseColors);
-          currentIndex = 0;
         }
-        updateCard();
-      } else {
-        isAnswerShown = !isAnswerShown;
-        updateCard();
       }
+      isAnswerShown = isPracticeMode;
+      updateCard();
     }
 
     // シークレットモード切り替え
     function toggleSecretMode() {
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
+        // 練習モードに切り替えたときは、順番通りのリストに戻す
+        colors = [...baseColors];
+        currentIndex = 0;
         isAnswerShown = true;
         showToast("🔓✨ Practice Mode (Unlocked)");
       } else {
+        // テストモードに切り替えたときはシャッフルする
+        colors = shuffleArray(baseColors);
+        currentIndex = 0;
         isAnswerShown = false;
         showToast("🔒 Test Mode (Locked)");
       }
@@ -335,8 +340,10 @@
       }
       currentIndex++;
       if (currentIndex >= colors.length) {
-        colors = shuffleArray(baseColors);
         currentIndex = 0;
+        if (!isPracticeMode) {
+          colors = shuffleArray(baseColors);
+        }
       }
       isAnswerShown = isPracticeMode;
       updateCard();
