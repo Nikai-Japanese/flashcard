@@ -14,12 +14,13 @@
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: radial-gradient(circle at top, #1e293b 0%, #0f172a 100%);
+      /* 白と黒のどちらとも被らない、プロ仕様のミディアム・スレートグレー背景 */
+      background: radial-gradient(circle at top, #cbd5e1 0%, #94a3b8 100%);
       display: flex;
       flex-direction: column;
       height: 100dvh;
       overflow: hidden;
-      color: #f8fafc;
+      color: #1e293b;
     }
 
     /* 上部のカウンター */
@@ -27,9 +28,9 @@
       text-align: center;
       padding: 14px;
       font-size: 1rem;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: 2px;
-      color: #94a3b8;
+      color: #334155;
     }
 
     /* メインのカードエリア */
@@ -49,13 +50,13 @@
       max-height: 550px;
       border-radius: 28px;
       box-shadow: 
-        0 20px 40px rgba(0, 0, 0, 0.45),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+        0 18px 36px rgba(15, 23, 42, 0.22),
+        inset 0 0 0 2px rgba(255, 255, 255, 0.35);
       display: flex;
       justify-content: center;
       align-items: center;
       cursor: pointer;
-      transition: background-color 0.25s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1);
+      transition: background-color 0.25s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
       user-select: none;
     }
 
@@ -94,28 +95,27 @@
       width: 72px;
       height: 72px;
       border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background-color: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      background-color: rgba(255, 255, 255, 0.45);
       backdrop-filter: blur(8px);
-      color: #f8fafc;
+      color: #1e293b;
       font-size: 1.8rem;
-      font-weight: 600;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
       cursor: pointer;
       display: flex;
       justify-content: center;
       align-items: center;
-      transition: background-color 0.2s, transform 0.1s, border-color 0.2s;
+      transition: background-color 0.2s, transform 0.1s;
     }
 
     .nav-btn:hover {
-      background-color: rgba(255, 255, 255, 0.14);
-      border-color: rgba(255, 255, 255, 0.25);
+      background-color: rgba(255, 255, 255, 0.65);
     }
 
     .nav-btn:active {
       transform: scale(0.92);
-      background-color: rgba(255, 255, 255, 0.2);
+      background-color: rgba(255, 255, 255, 0.8);
     }
 
     /* 横向き（ランドスケープ）時のレイアウト調整 */
@@ -144,7 +144,7 @@
   <div class="header" id="counter">TAP</div>
 
   <div class="card-container">
-    <div class="card" id="card" style="background-color: #334155;">
+    <div class="card" id="card" style="background-color: #64748b;">
       <div class="indonesian-word" id="indo-text"></div>
     </div>
   </div>
@@ -160,11 +160,11 @@
       { hex: "#1E88E5", indo: "Biru",    textColor: "#FFFFFF" },
       { hex: "#FDD835", indo: "Kuning",  textColor: "#1E293B" },
       { hex: "#43A047", indo: "Hijau",   textColor: "#FFFFFF" },
-      { hex: "#18181B", indo: "Hitam",   textColor: "#FFFFFF" },
+      { hex: "#111827", indo: "Hitam",   textColor: "#FFFFFF" },
       { hex: "#FFFFFF", indo: "Putih",   textColor: "#1E293B" },
       { hex: "#FB8C00", indo: "Oranye",  textColor: "#FFFFFF" },
       { hex: "#6D4C41", indo: "Cokelat", textColor: "#FFFFFF" },
-      { hex: "#8E24AA", indo: "Ungu",    textColor: "#FFFFFF" } // 紫を追加
+      { hex: "#8E24AA", indo: "Ungu",    textColor: "#FFFFFF" }
     ];
 
     function shuffleArray(array) {
@@ -192,6 +192,15 @@
       
       counter.textContent = `${currentIndex + 1} / ${colors.length}`;
       card.style.backgroundColor = current.hex;
+
+      // 白と黒の時は輪郭がよりくっきり見えるように枠の光彩を調整
+      if (current.indo === "Putih") {
+        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
+      } else if (current.indo === "Hitam") {
+        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25)";
+      } else {
+        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
+      }
 
       if (!isAnswerShown) {
         indoText.classList.remove("visible");
