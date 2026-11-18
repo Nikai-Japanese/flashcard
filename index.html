@@ -21,7 +21,7 @@
       overflow: hidden;
     }
 
-    /* メインのカードエリア（上部の余白もバランスよく調整） */
+    /* メインのカードエリア */
     .card-container {
       flex: 1;
       display: flex;
@@ -43,6 +43,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      padding: 0 16px;
       cursor: pointer;
       transition: background-color 0.25s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
       user-select: none;
@@ -52,9 +53,9 @@
       transform: scale(0.97);
     }
 
-    /* 答えのテキスト */
+    /* 答えのテキスト（1.5倍サイズ・画面幅に応じてはみ出し防止） */
     .indonesian-word {
-      font-size: 4.5rem;
+      font-size: clamp(3.8rem, 16vw, 6.75rem);
       font-weight: 800;
       letter-spacing: 2px;
       text-align: center;
@@ -121,7 +122,7 @@
         font-size: 1.4rem;
       }
       .indonesian-word {
-        font-size: 3.6rem;
+        font-size: 5.4rem;
       }
     }
   </style>
@@ -216,7 +217,7 @@
       if (!isStarted) isStarted = true;
       currentIndex++;
       if (currentIndex >= colors.length) {
-        colors = shuffleArray(baseColors); // 1周したら再度シャッフル
+        colors = shuffleArray(baseColors);
         currentIndex = 0;
       }
       isAnswerShown = false;
