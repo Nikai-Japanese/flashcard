@@ -46,14 +46,14 @@
       user-select: none;
     }
 
-    /* 練習モード（🔓 開いたカギ：ハッキリわかる明るいエメラルドグリーン系） */
+    /* 練習モード（🔓 開いたカギ：爽やかな青） */
     .mode-btn.practice {
-      background-color: rgba(16, 185, 129, 0.9);
+      background-color: rgba(30, 136, 229, 0.9);
     }
 
-    /* テストモード（🔒 閉じたカギ：重厚なダークスレート系） */
+    /* テストモード（🔒 閉じたカギ：ハッキリした赤） */
     .mode-btn.test {
-      background-color: rgba(30, 41, 59, 0.9);
+      background-color: rgba(229, 57, 53, 0.9);
     }
 
     .mode-btn:active {
@@ -228,7 +228,7 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true; // 初期状態は練習モード（🔓 解除）
+    let isPracticeMode = true; // 初期状態は練習モード（🔓 解除：青）
 
     const card = document.getElementById("card");
     const startTap = document.getElementById("start-tap");
@@ -269,7 +269,7 @@
       }
     }
 
-    // ボタンをクリックするたびに「🔓緑（解除）」と「🔒ダーク（ロック）」がハッキリ切り替わる
+    // ボタンをクリックするたびに「🔓青（練習）」と「🔒赤（テスト）」が切り替わる
     modeBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       isPracticeMode = !isPracticeMode;
