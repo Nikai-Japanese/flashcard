@@ -57,11 +57,19 @@
       min-height: 0;
     }
 
-    .card {
+    /* 2枚のカードを重ねて3D空間を作るステージ */
+    .card-stage {
+      position: relative;
       width: 100%;
       max-width: 650px;
       height: 100%;
       max-height: 620px;
+      perspective: 1400px;
+    }
+
+    .card {
+      position: absolute;
+      inset: 0;
       background-color: transparent;
       border-radius: 28px;
       box-shadow: none;
@@ -70,9 +78,21 @@
       align-items: center;
       padding: 0 16px;
       cursor: pointer;
-      transition: background-color 0.25s ease, transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease;
       user-select: none;
       touch-action: none;
+      transform-origin: left center;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    .card-back {
+      z-index: 1;
+      display: none;
+      pointer-events: none;
+    }
+
+    .card-front {
+      z-index: 2;
     }
 
     /* 最初の画面の大きな「TAP」表示 */
@@ -104,7 +124,7 @@
       visibility: visible;
     }
 
-    /* 画面下部の見えないシークレット帯（カード下の余白84pxと一致） */
+    /* 画面下部の見えないシークレット帯 */
     .secret-trigger-bar {
       position: absolute;
       bottom: 0;
@@ -141,9 +161,17 @@
   <div class="secret-trigger-bar" id="secret-bar"></div>
 
   <div class="card-container">
-    <div class="card" id="card">
-      <div class="start-tap" id="start-tap">TAP</div>
-      <div class="indonesian-word" id="indo-text"></div>
+    <div class="card-stage">
+      <!-- 下に控えるカード -->
+      <div class="card card-back" id="card-back">
+        <div class="indonesian-word" id="indo-text-back"></div>
+      </div>
+
+      <!-- 手前でめくれるカード -->
+      <div class="card card-front" id="card-front">
+        <div class="start-tap" id="start-tap">TAP</div>
+        <div class="indonesian-word" id="indo-text-front"></div>
+      </div>
     </div>
   </div>
 
@@ -175,20 +203,25 @@
     let isAnswerShown = false;
     let isPracticeMode = true;
 
-    // 3回タップ検知用の変数
+    // 3回タップ検知用
     let tapCount = 0;
     let tapTimer = null;
     let toastTimer = null;
 
-    // スワイプ検知用の変数
+    // 本めくり（スワイプ）制御用
     let startX = 0;
     let isDragging = false;
-    let hasSwiped = false;
+    let swipeDirection = null; // "left" | "right" | null
     let justSwiped = false;
+    let pendingNextDeck = null;
+    let flipTimeout = null;
+    let pendingCommit = null;
 
-    const card = document.getElementById("card");
+    const cardFront = document.getElementById("card-front");
+    const cardBack = document.getElementById("card-back");
     const startTap = document.getElementById("start-tap");
-    const indoText = document.getElementById("indo-text");
+    const indoTextFront = document.getElementById("indo-text-front");
+    const indoTextBack = document.getElementById("indo-text-back");
     const toast = document.getElementById("toast");
     const secretBar = document.getElementById("secret-bar");
 
@@ -201,108 +234,226 @@
       }, 1200);
     }
 
+    function applyCardStyle(cardEl, textEl, data, showWord, useTransition) {
+      cardEl.style.backgroundColor = data.hex;
+
+      if (data.indo === "Putih") {
+        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
+      } else if (data.indo === "Hitam") {
+        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25)";
+      } else {
+        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
+      }
+
+      textEl.textContent = data.indo;
+      textEl.style.color = data.textColor;
+      textEl.style.transition = useTransition ? "opacity 0.2s ease" : "none";
+
+      if (showWord) {
+        textEl.classList.add("visible");
+      } else {
+        textEl.classList.remove("visible");
+      }
+    }
+
+    function updateFrontCard() {
+      applyCardStyle(
+        cardFront,
+        indoTextFront,
+        colors[currentIndex],
+        isAnswerShown,
+        isPracticeMode
+      );
+    }
+
+    function flushPendingFlip() {
+      if (flipTimeout) {
+        clearTimeout(flipTimeout);
+        flipTimeout = null;
+      }
+      if (pendingCommit) {
+        pendingCommit();
+        pendingCommit = null;
+      }
+    }
+
     function startQuiz() {
       isStarted = true;
       startTap.style.display = "none";
-      indoText.style.display = "block";
+      indoTextFront.style.display = "block";
+      indoTextBack.style.display = "block";
       isAnswerShown = isPracticeMode;
-      updateCard();
+      updateFrontCard();
     }
 
-    function updateCard() {
-      const current = colors[currentIndex];
-      
-      card.style.backgroundColor = current.hex;
-
-      if (current.indo === "Putih") {
-        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
-      } else if (current.indo === "Hitam") {
-        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25)";
-      } else {
-        card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
-      }
-
-      indoText.textContent = current.indo;
-      indoText.style.color = current.textColor;
-
-      if (!isPracticeMode) {
-        indoText.style.transition = 'none';
-      } else {
-        indoText.style.transition = 'opacity 0.2s ease';
-      }
-
-      if (isAnswerShown) {
-        indoText.classList.add("visible");
-      } else {
-        indoText.classList.remove("visible");
-      }
-    }
-
-    function nextCard() {
-      currentIndex++;
-      if (currentIndex >= colors.length) {
-        currentIndex = 0;
+    function getNextData() {
+      const nextIdx = currentIndex + 1;
+      if (nextIdx >= colors.length) {
         if (!isPracticeMode) {
-          colors = shuffleArray(baseColors);
+          if (!pendingNextDeck) {
+            pendingNextDeck = shuffleArray(baseColors);
+          }
+          return { data: pendingNextDeck[0], nextIdx: 0, newDeck: pendingNextDeck };
         }
+        return { data: colors[0], nextIdx: 0, newDeck: null };
       }
-      isAnswerShown = isPracticeMode;
-      updateCard();
+      return { data: colors[nextIdx], nextIdx, newDeck: null };
     }
 
-    function prevCard() {
-      currentIndex = (currentIndex - 1 + colors.length) % colors.length;
-      isAnswerShown = isPracticeMode;
-      updateCard();
+    function getPrevIndex() {
+      return (currentIndex - 1 + colors.length) % colors.length;
     }
 
-    // 【スワイプ操作】左スワイプで次へ、右スワイプで戻る
-    card.addEventListener("pointerdown", (e) => {
+    // 【本のページめくり操作】
+    cardFront.addEventListener("pointerdown", (e) => {
+      flushPendingFlip();
       startX = e.clientX;
       isDragging = true;
-      hasSwiped = false;
-      if (isStarted) {
-        card.style.transition = "background-color 0.25s ease, box-shadow 0.25s ease";
-      }
+      swipeDirection = null;
+      pendingNextDeck = null;
+
+      cardFront.style.transition = "none";
+      cardBack.style.transition = "none";
     });
 
-    card.addEventListener("pointermove", (e) => {
+    cardFront.addEventListener("pointermove", (e) => {
       if (!isDragging || !isStarted) return;
       const diffX = e.clientX - startX;
-      if (Math.abs(diffX) > 10) {
-        hasSwiped = true;
-        card.style.transform = `translateX(${diffX}px) rotate(${diffX * 0.025}deg)`;
+
+      if (Math.abs(diffX) <= 10 && !swipeDirection) return;
+
+      // スワイプ方向が確定した瞬間に下のカードを準備
+      if (!swipeDirection) {
+        swipeDirection = diffX < 0 ? "left" : "right";
+        cardBack.style.display = "flex";
+
+        if (swipeDirection === "left") {
+          const next = getNextData();
+          applyCardStyle(cardBack, indoTextBack, next.data, isPracticeMode, false);
+        } else {
+          const prevIdx = getPrevIndex();
+          applyCardStyle(cardBack, indoTextBack, colors[currentIndex], isAnswerShown, false);
+          applyCardStyle(cardFront, indoTextFront, colors[prevIdx], isPracticeMode, false);
+        }
+      }
+
+      const stageWidth = cardFront.offsetWidth || 320;
+      const maxDrag = Math.min(stageWidth * 0.78, 280);
+
+      if (swipeDirection === "left") {
+        // 今のページを左へめくる (0deg -> -100deg)
+        const progress = Math.min(1, Math.max(0, -diffX) / maxDrag);
+        const angle = -progress * 100;
+        const opacity = progress > 0.72 ? Math.max(0, 1 - (progress - 0.72) / 0.28) : 1;
+
+        cardFront.style.transform = `rotateY(${angle}deg)`;
+        cardFront.style.opacity = opacity;
+        cardBack.style.filter = `brightness(${0.82 + 0.18 * progress})`;
+      } else {
+        // 前のページを左から開いて戻す (-95deg -> 0deg)
+        const progress = Math.min(1, Math.max(0, diffX) / maxDrag);
+        const angle = -95 + progress * 95;
+        const opacity = Math.min(1, progress * 3.5);
+
+        cardFront.style.transform = `rotateY(${angle}deg)`;
+        cardFront.style.opacity = opacity;
+        cardBack.style.filter = `brightness(${1 - 0.18 * progress})`;
       }
     });
 
     function endDrag(e) {
       if (!isDragging) return;
       isDragging = false;
-      card.style.transition = "";
-      card.style.transform = "";
 
-      if (hasSwiped) {
-        justSwiped = true;
-        setTimeout(() => {
-          justSwiped = false;
-        }, 80);
+      if (!swipeDirection) return;
 
-        if (isStarted) {
-          const diffX = e.clientX - startX;
-          if (diffX < -55) {
-            nextCard();
-          } else if (diffX > 55) {
-            prevCard();
-          }
+      justSwiped = true;
+      setTimeout(() => {
+        justSwiped = false;
+      }, 90);
+
+      const diffX = e.clientX - startX;
+      const threshold = 55;
+
+      cardFront.style.transition = "transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease";
+      cardBack.style.transition = "filter 0.28s ease";
+
+      if (swipeDirection === "left") {
+        if (diffX < -threshold) {
+          // めくり完了 → 次の色へ
+          const next = getNextData();
+          cardFront.style.transform = "rotateY(-105deg)";
+          cardFront.style.opacity = "0";
+          cardBack.style.filter = "brightness(1)";
+
+          pendingCommit = () => {
+            if (next.newDeck) colors = next.newDeck;
+            pendingNextDeck = null;
+            currentIndex = next.nextIdx;
+            isAnswerShown = isPracticeMode;
+
+            cardFront.style.transition = "none";
+            cardFront.style.transform = "rotateY(0deg)";
+            cardFront.style.opacity = "1";
+            updateFrontCard();
+            cardBack.style.display = "none";
+            cardBack.style.filter = "brightness(1)";
+          };
+        } else {
+          // キャンセル → 元の色に戻る
+          cardFront.style.transform = "rotateY(0deg)";
+          cardFront.style.opacity = "1";
+          cardBack.style.filter = "brightness(0.82)";
+
+          pendingCommit = () => {
+            pendingNextDeck = null;
+            cardBack.style.display = "none";
+            cardBack.style.filter = "brightness(1)";
+          };
+        }
+      } else {
+        if (diffX > threshold) {
+          // 戻し完了 → 前の色へ
+          const prevIdx = getPrevIndex();
+          cardFront.style.transform = "rotateY(0deg)";
+          cardFront.style.opacity = "1";
+          cardBack.style.filter = "brightness(0.82)";
+
+          pendingCommit = () => {
+            currentIndex = prevIdx;
+            isAnswerShown = isPracticeMode;
+
+            cardFront.style.transition = "none";
+            updateFrontCard();
+            cardBack.style.display = "none";
+            cardBack.style.filter = "brightness(1)";
+          };
+        } else {
+          // キャンセル → 元の色に戻る
+          cardFront.style.transform = "rotateY(-95deg)";
+          cardFront.style.opacity = "0";
+          cardBack.style.filter = "brightness(1)";
+
+          pendingCommit = () => {
+            cardFront.style.transition = "none";
+            cardFront.style.transform = "rotateY(0deg)";
+            cardFront.style.opacity = "1";
+            updateFrontCard();
+            cardBack.style.display = "none";
+          };
         }
       }
+
+      flipTimeout = setTimeout(() => {
+        flushPendingFlip();
+      }, 280);
     }
 
-    card.addEventListener("pointerup", endDrag);
-    card.addEventListener("pointercancel", endDrag);
+    cardFront.addEventListener("pointerup", endDrag);
+    cardFront.addEventListener("pointercancel", endDrag);
 
     // 【カードのタップ】文字の表示／非表示を切り替え
-    card.addEventListener("click", (e) => {
+    cardFront.addEventListener("click", (e) => {
       e.stopPropagation();
       if (justSwiped) {
         justSwiped = false;
@@ -314,7 +465,7 @@
       }
 
       isAnswerShown = !isAnswerShown;
-      updateCard();
+      updateFrontCard();
     });
 
     // 【画面下部の透明帯（シークレットバー）での3回タップ検知】
@@ -335,6 +486,7 @@
 
     // シークレットモード切り替え
     function toggleSecretMode() {
+      flushPendingFlip();
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
         colors = [...baseColors];
@@ -348,7 +500,7 @@
         showToast("🔒 Test Mode");
       }
       if (isStarted) {
-        updateCard();
+        updateFrontCard();
       }
     }
   </script>
