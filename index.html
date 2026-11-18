@@ -206,7 +206,7 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true; // 初期状態は練習モード（順番通り）
+    let isPracticeMode = true;
 
     // 3回タップ検知用の変数
     let tapCount = 0;
@@ -264,9 +264,9 @@
       }
     }
 
-    // 【カード専用の通常のタップ】
+    // 【カードの通常のタップ】
     card.addEventListener("click", (e) => {
-      e.stopPropagation(); // 背景へのイベント伝播を防止
+      e.stopPropagation();
       if (!isStarted) {
         startQuiz();
         return;
@@ -285,9 +285,8 @@
       }
     });
 
-    // 【画面外（背景・余白部分）の3回タップ検知】
-    document.body.addEventListener("click", (e) => {
-      // カードや矢印ボタンをクリックした場合は背景のカウントをしない
+    // 【画面外（背景・余白部分）の3回タップ検知：スマホ・PC両対応】
+    function handleBackgroundTap(e) {
       if (e.target.closest('#card') || e.target.closest('.controls')) {
         return;
       }
@@ -296,13 +295,20 @@
       if (tapCount === 1) {
         tapTimer = setTimeout(() => {
           tapCount = 0;
-        }, 350);
+        }, 400); // スマホでの連続タップ間隔を考慮して少し余裕を持たせました
       } else if (tapCount === 3) {
         clearTimeout(tapTimer);
         tapCount = 0;
         toggleSecretMode();
       }
-    });
+    }
+
+    // PC用（click）とスマホ用（touchend）の両方を登録
+    document.body.addEventListener("click", handleBackgroundTap);
+    document.body.addEventListener("touchend", (e) => {
+      // touchend時のデフォルトのマウスイベント発火による二重カウントを防ぐ
+      handleBackgroundTap(e);
+    }, { passive: true });
 
     // シークレットモード切り替え
     function toggleSecretMode() {
@@ -311,12 +317,12 @@
         colors = [...baseColors];
         currentIndex = 0;
         isAnswerShown = true;
-        showToast("🔓✨ Practice Mode (Unlocked)");
+        showToast("🔓✨ Practice Mode");
       } else {
         colors = shuffleArray(baseColors);
         currentIndex = 0;
         isAnswerShown = false;
-        showToast("🔒 Test Mode (Locked)");
+        showToast("🔒 Test Mode");
       }
       if (isStarted) {
         updateCard();
