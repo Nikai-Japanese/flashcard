@@ -10,7 +10,16 @@
       margin: 0;
       padding: 0;
       -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
+      touch-action: none;
+    }
+
+    html, body {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
     }
 
     body {
@@ -18,9 +27,6 @@
       background: radial-gradient(circle at top, #cbd5e1 0%, #94a3b8 100%);
       display: flex;
       flex-direction: column;
-      height: 100dvh;
-      overflow: hidden;
-      position: relative;
     }
 
     /* シークレット切り替えを知らせる控えめな通知（トースト） */
@@ -50,6 +56,7 @@
     /* メインのカードエリア（下に3回タップ用の余白84pxを確保） */
     .card-container {
       flex: 1;
+      position: relative;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -77,87 +84,18 @@
       padding: 0 16px;
       cursor: pointer;
       user-select: none;
-      touch-action: none;
-      overflow: hidden;
-    }
-
-    .card-back {
-      z-index: 1;
-      display: none;
-      pointer-events: none;
-    }
-
-    .card-front {
       z-index: 2;
     }
 
-    /* めくれた紙の裏面レイヤー */
-    .page-back {
+    /* めくり中だけ表示する滑らかなCanvasレイヤー */
+    .curl-canvas {
       position: absolute;
       inset: 0;
-      border-radius: 28px;
-      background-color: #f8fafc;
-      z-index: 3;
-      display: none;
-      pointer-events: none;
-      transform-origin: 0 0;
-      overflow: hidden;
-      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
-    }
-
-    /* 紙の丸み・光沢を表現するグラデーション帯 */
-    .page-back-shade {
-      position: absolute;
-      left: 0;
-      top: -1200px;
-      width: 700px;
-      height: 2400px;
-      transform-origin: 0 1200px;
-      background: linear-gradient(
-        to right,
-        rgba(15, 23, 42, 0.24) 0px,
-        rgba(255, 255, 255, 0.98) 18px,
-        rgba(241, 245, 249, 0.96) 52px,
-        rgba(226, 232, 240, 0.98) 140px,
-        rgba(203, 213, 225, 1) 100%
-      );
-      pointer-events: none;
-    }
-
-    /* めくれた紙が下のページに落とす影 */
-    .cast-shadow {
-      position: absolute;
-      left: 0;
-      top: -1200px;
-      width: 130px;
-      height: 2400px;
-      transform-origin: 0 1200px;
-      background: linear-gradient(
-        to right,
-        rgba(15, 23, 42, 0.36) 0px,
-        rgba(15, 23, 42, 0.14) 36px,
-        rgba(15, 23, 42, 0) 120px
-      );
+      width: 100%;
+      height: 100%;
       pointer-events: none;
       display: none;
-    }
-
-    /* 表ページ側の折り目付近の影 */
-    .front-crease {
-      position: absolute;
-      left: -60px;
-      top: -1200px;
-      width: 60px;
-      height: 2400px;
-      transform-origin: 60px 1200px;
-      background: linear-gradient(
-        to right,
-        rgba(15, 23, 42, 0) 0px,
-        rgba(15, 23, 42, 0.08) 38px,
-        rgba(15, 23, 42, 0.22) 60px
-      );
-      pointer-events: none;
-      display: none;
+      z-index: 5;
     }
 
     /* 最初の画面の大きな「TAP」表示 */
@@ -197,7 +135,7 @@
       width: 100%;
       height: 84px;
       background: transparent;
-      z-index: 10;
+      z-index: 20;
       cursor: pointer;
     }
 
@@ -225,26 +163,14 @@
   <!-- 画面下部の完全に見えないシークレットタップ専用エリア -->
   <div class="secret-trigger-bar" id="secret-bar"></div>
 
-  <div class="card-container">
+  <div class="card-container" id="card-container">
     <div class="card-stage" id="card-stage">
-      <!-- 下のページ（次の色） -->
-      <div class="card card-back" id="card-back">
-        <div class="indonesian-word" id="indo-text-back"></div>
-        <div class="cast-shadow" id="cast-shadow"></div>
-      </div>
-
-      <!-- 手前のページ（現在の色） -->
-      <div class="card card-front" id="card-front">
+      <div class="card" id="card-front">
         <div class="start-tap" id="start-tap">TAP</div>
         <div class="indonesian-word" id="indo-text-front"></div>
-        <div class="front-crease" id="front-crease"></div>
-      </div>
-
-      <!-- めくれて折り返された紙の裏面 -->
-      <div class="page-back" id="page-back">
-        <div class="page-back-shade" id="page-back-shade"></div>
       </div>
     </div>
+    <canvas class="curl-canvas" id="curl-canvas"></canvas>
   </div>
 
   <script>
@@ -291,21 +217,24 @@
     let justSwiped = false;
     let pendingNextDeck = null;
     let activeCurlAngle = -0.22;
-    let currentProgress = 0; // 0 = 平ら, 1 = 完全にめくれた状態
-    let dragFramePending = false;
+    let currentProgress = 0;
     let animFrameId = null;
+    let dragFramePending = false;
     let pendingCommit = null;
 
+    // Canvas描画用の現在のペア情報
+    let curlFrontData = null;
+    let curlFrontShowWord = false;
+    let curlBackData = null;
+    let curlBackShowWord = false;
+
+    const cardContainer = document.getElementById("card-container");
     const cardStage = document.getElementById("card-stage");
     const cardFront = document.getElementById("card-front");
-    const cardBack = document.getElementById("card-back");
-    const pageBack = document.getElementById("page-back");
-    const pageBackShade = document.getElementById("page-back-shade");
-    const castShadow = document.getElementById("cast-shadow");
-    const frontCrease = document.getElementById("front-crease");
+    const curlCanvas = document.getElementById("curl-canvas");
+    const ctx = curlCanvas.getContext("2d");
     const startTap = document.getElementById("start-tap");
     const indoTextFront = document.getElementById("indo-text-front");
-    const indoTextBack = document.getElementById("indo-text-back");
     const toast = document.getElementById("toast");
     const secretBar = document.getElementById("secret-bar");
 
@@ -318,39 +247,45 @@
       }, 1200);
     }
 
-    function applyCardStyle(cardEl, textEl, data, showWord, useTransition) {
-      cardEl.style.backgroundColor = data.hex;
+    function updateFrontCard() {
+      const data = colors[currentIndex];
+      cardFront.style.backgroundColor = data.hex;
 
       if (data.indo === "Putih") {
-        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
+        cardFront.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.25), inset 0 0 0 2px #cbd5e1";
       } else if (data.indo === "Hitam") {
-        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25)";
+        cardFront.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.25)";
       } else {
-        cardEl.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
+        cardFront.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
       }
 
-      textEl.textContent = data.indo;
-      textEl.style.color = data.textColor;
-      textEl.style.transition = useTransition ? "opacity 0.2s ease" : "none";
+      indoTextFront.textContent = data.indo;
+      indoTextFront.style.color = data.textColor;
+      indoTextFront.style.transition = isPracticeMode ? "opacity 0.2s ease" : "none";
 
-      if (showWord) {
-        textEl.classList.add("visible");
+      if (isAnswerShown) {
+        indoTextFront.classList.add("visible");
       } else {
-        textEl.classList.remove("visible");
+        indoTextFront.classList.remove("visible");
       }
     }
 
-    function updateFrontCard() {
-      applyCardStyle(
-        cardFront,
-        indoTextFront,
-        colors[currentIndex],
-        isAnswerShown,
-        isPracticeMode
-      );
+    // Canvas用 角丸パス
+    function roundRectPath(c, x, y, w, h, r) {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.lineTo(x + w - r, y);
+      c.quadraticCurveTo(x + w, y, x + w, y + r);
+      c.lineTo(x + w, y + h - r);
+      c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      c.lineTo(x + r, y + h);
+      c.quadraticCurveTo(x, y + h, x, y + h - r);
+      c.lineTo(x, y + r);
+      c.quadraticCurveTo(x, y, x + r, y);
+      c.closePath();
     }
 
-    // 半平面で四角形を切り抜く（Sutherland-Hodgman）
+    // 半平面で四角形を切り抜く
     function clipPolygon(poly, nx, ny, s, keepLeft) {
       const out = [];
       const sign = keepLeft ? -1 : 1;
@@ -376,29 +311,91 @@
       return out;
     }
 
-    function toClipPath(poly) {
-      if (poly.length < 3) return "polygon(0 0, 0 0, 0 0)";
-      return "polygon(" + poly.map(pt => `${pt.x.toFixed(1)}px ${pt.y.toFixed(1)}px`).join(", ") + ")";
+    function polyPath(c, poly) {
+      c.beginPath();
+      c.moveTo(poly[0].x, poly[0].y);
+      for (let i = 1; i < poly.length; i++) {
+        c.lineTo(poly[i].x, poly[i].y);
+      }
+      c.closePath();
     }
 
-    // めくれ具合 p (0〜1) に応じて、表・裏・影の幾何学をリアルタイム描画
-    function renderCurl(p, angle) {
-      const W = cardStage.offsetWidth;
-      const H = cardStage.offsetHeight;
+    let canvasMetrics = null;
 
-      if (p <= 0.001) {
-        cardFront.style.clipPath = "";
-        cardFront.style.webkitClipPath = "";
-        cardFront.style.visibility = "visible";
-        pageBack.style.display = "none";
-        castShadow.style.display = "none";
-        frontCrease.style.display = "none";
-        return;
+    function prepareCanvas() {
+      const contRect = cardContainer.getBoundingClientRect();
+      const stageRect = cardStage.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+
+      curlCanvas.width = Math.round(contRect.width * dpr);
+      curlCanvas.height = Math.round(contRect.height * dpr);
+
+      const cs = getComputedStyle(indoTextFront);
+
+      canvasMetrics = {
+        dpr,
+        contW: contRect.width,
+        contH: contRect.height,
+        offsetX: stageRect.left - contRect.left,
+        offsetY: stageRect.top - contRect.top,
+        W: stageRect.width,
+        H: stageRect.height,
+        font: `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      };
+    }
+
+    function drawCardFace(data, showWord, W, H, font, withDropShadow) {
+      if (withDropShadow) {
+        ctx.save();
+        ctx.shadowColor = data.indo === "Hitam" ? "rgba(15, 23, 42, 0.35)" : "rgba(15, 23, 42, 0.24)";
+        ctx.shadowBlur = 32;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 14;
+        roundRectPath(ctx, 0, 0, W, H, 28);
+        ctx.fillStyle = data.hex;
+        ctx.fill();
+        ctx.restore();
+      } else {
+        roundRectPath(ctx, 0, 0, W, H, 28);
+        ctx.fillStyle = data.hex;
+        ctx.fill();
       }
+
+      // 内側の縁取り
+      roundRectPath(ctx, 1, 1, W - 2, H - 2, 27);
+      ctx.lineWidth = 2;
+      if (data.indo === "Putih") {
+        ctx.strokeStyle = "#cbd5e1";
+      } else if (data.indo === "Hitam") {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      } else {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+      }
+      ctx.stroke();
+
+      if (showWord) {
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = data.textColor;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
+        ctx.fillText(data.indo, W / 2, H / 2);
+        ctx.restore();
+      }
+    }
+
+    // Canvasでリアルな紙めくりを描画
+    function renderCurlCanvas(p, angle) {
+      if (!canvasMetrics) prepareCanvas();
+      const { dpr, contW, contH, offsetX, offsetY, W, H, font } = canvasMetrics;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, contW, contH);
+      ctx.translate(offsetX, offsetY);
 
       const nx = Math.cos(angle);
       const ny = Math.sin(angle);
-
       const corners = [
         { x: 0, y: 0 },
         { x: W, y: 0 },
@@ -417,31 +414,48 @@
       const s = sMax - p * (sMax - sMin);
       const Mx = s * nx;
       const My = s * ny;
-      const angleDeg = (angle * 180) / Math.PI;
 
-      // 1. 手前カード（折り目より左側だけ残す）
-      const frontPoly = clipPolygon(corners, nx, ny, s, true);
-      if (frontPoly.length < 3) {
-        cardFront.style.visibility = "hidden";
-      } else {
-        cardFront.style.visibility = "visible";
-        const cp = toClipPath(frontPoly);
-        cardFront.style.clipPath = cp;
-        cardFront.style.webkitClipPath = cp;
-        frontCrease.style.display = "block";
-        frontCrease.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
+      // 1. 下のカード（めくれた下から見える次の色）
+      drawCardFace(curlBackData, curlBackShowWord, W, H, font, true);
+
+      // 下のカードに落ちる影
+      const shadowAlpha = Math.min(1, p * 4, (1 - p) * 4);
+      if (shadowAlpha > 0.01) {
+        ctx.save();
+        roundRectPath(ctx, 0, 0, W, H, 28);
+        ctx.clip();
+        const castGrad = ctx.createLinearGradient(Mx, My, Mx + nx * 120, My + ny * 120);
+        castGrad.addColorStop(0, `rgba(15, 23, 42, ${(0.34 * shadowAlpha).toFixed(3)})`);
+        castGrad.addColorStop(0.35, `rgba(15, 23, 42, ${(0.12 * shadowAlpha).toFixed(3)})`);
+        castGrad.addColorStop(1, "rgba(15, 23, 42, 0)");
+        ctx.fillStyle = castGrad;
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
       }
 
-      // 2. めくれた紙の裏面（折り目より右側を切り取り、折り目で鏡面反転）
-      const backPoly = clipPolygon(corners, nx, ny, s, false);
-      if (backPoly.length < 3 || p >= 0.999) {
-        pageBack.style.display = "none";
-      } else {
-        pageBack.style.display = "block";
-        const cpBack = toClipPath(backPoly);
-        pageBack.style.clipPath = cpBack;
-        pageBack.style.webkitClipPath = cpBack;
+      // 2. 手前のカード（折り目より左側だけ描画）
+      const frontPoly = clipPolygon(corners, nx, ny, s, true);
+      if (frontPoly.length >= 3) {
+        ctx.save();
+        polyPath(ctx, frontPoly);
+        ctx.clip();
+        drawCardFace(curlFrontData, curlFrontShowWord, W, H, font, false);
 
+        // 折り目付近の陰影
+        if (p > 0.005) {
+          const creaseGrad = ctx.createLinearGradient(Mx - nx * 52, My - ny * 52, Mx, My);
+          creaseGrad.addColorStop(0, "rgba(15, 23, 42, 0)");
+          creaseGrad.addColorStop(0.65, "rgba(15, 23, 42, 0.07)");
+          creaseGrad.addColorStop(1, "rgba(15, 23, 42, 0.2)");
+          ctx.fillStyle = creaseGrad;
+          ctx.fillRect(0, 0, W, H);
+        }
+        ctx.restore();
+      }
+
+      // 3. めくれた紙の裏面（折り目より右側を鏡面反転して描画）
+      const backPoly = clipPolygon(corners, nx, ny, s, false);
+      if (backPoly.length >= 3 && p > 0.002 && p < 0.998) {
         const a = 1 - 2 * nx * nx;
         const b = -2 * nx * ny;
         const c = -2 * nx * ny;
@@ -449,14 +463,45 @@
         const tx = 2 * s * nx;
         const ty = 2 * s * ny;
 
-        pageBack.style.transform = `matrix(${a.toFixed(5)}, ${b.toFixed(5)}, ${c.toFixed(5)}, ${d.toFixed(5)}, ${tx.toFixed(1)}, ${ty.toFixed(1)})`;
-        pageBackShade.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
-      }
+        ctx.save();
+        ctx.transform(a, b, c, d, tx, ty);
+        polyPath(ctx, backPoly);
+        ctx.clip();
+        roundRectPath(ctx, 0, 0, W, H, 28);
+        ctx.clip();
 
-      // 3. 下のページに落ちる影
-      castShadow.style.display = "block";
-      castShadow.style.transform = `translate(${Mx.toFixed(1)}px, ${My.toFixed(1)}px) rotate(${angleDeg.toFixed(2)}deg)`;
-      castShadow.style.opacity = Math.min(1, p * 4, (1 - p) * 4).toFixed(2);
+        // 白い紙のベース
+        ctx.fillStyle = "#f8fafc";
+        ctx.fillRect(0, 0, W, H);
+
+        // 紙のカール（丸み・光沢）グラデーション
+        const curlGrad = ctx.createLinearGradient(Mx, My, Mx + nx * 240, My + ny * 240);
+        curlGrad.addColorStop(0, "rgba(15, 23, 42, 0.22)");
+        curlGrad.addColorStop(0.08, "rgba(255, 255, 255, 0.98)");
+        curlGrad.addColorStop(0.24, "rgba(241, 245, 249, 0.96)");
+        curlGrad.addColorStop(0.6, "rgba(226, 232, 240, 0.98)");
+        curlGrad.addColorStop(1, "rgba(203, 213, 225, 1)");
+        ctx.fillStyle = curlGrad;
+        ctx.fillRect(0, 0, W, H);
+
+        // 紙の縁取り
+        roundRectPath(ctx, 1, 1, W - 2, H - 2, 27);
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.5)";
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function showCurlLayer() {
+      curlCanvas.style.display = "block";
+      cardFront.style.opacity = "0";
+    }
+
+    function hideCurlLayer() {
+      curlCanvas.style.display = "none";
+      cardFront.style.opacity = "1";
+      canvasMetrics = null;
     }
 
     function scheduleDragRender() {
@@ -465,19 +510,9 @@
       requestAnimationFrame(() => {
         dragFramePending = false;
         if (isDragging && swipeDirection) {
-          renderCurl(currentProgress, activeCurlAngle);
+          renderCurlCanvas(currentProgress, activeCurlAngle);
         }
       });
-    }
-
-    function resetFlatVisuals() {
-      cardFront.style.clipPath = "";
-      cardFront.style.webkitClipPath = "";
-      cardFront.style.visibility = "visible";
-      frontCrease.style.display = "none";
-      pageBack.style.display = "none";
-      castShadow.style.display = "none";
-      cardBack.style.display = "none";
     }
 
     function flushPendingFlip() {
@@ -501,7 +536,7 @@
         const ease = 1 - Math.pow(1 - t, 3);
         const p = fromP + (toP - fromP) * ease;
         currentProgress = p;
-        renderCurl(p, activeCurlAngle);
+        renderCurlCanvas(p, activeCurlAngle);
 
         if (t < 1) {
           animFrameId = requestAnimationFrame(step);
@@ -520,7 +555,6 @@
       isStarted = true;
       startTap.style.display = "none";
       indoTextFront.style.display = "block";
-      indoTextBack.style.display = "block";
       isAnswerShown = isPracticeMode;
       updateFrontCard();
     }
@@ -573,7 +607,6 @@
       if (!swipeDirection) {
         if (Math.hypot(diffX, diffY) <= 12) return;
 
-        // 明確な右スワイプだけ「戻る」、左や上斜めの動きは「次へ」として安定させる
         if (diffX > 14 && diffX > Math.abs(diffY) * 0.85) {
           swipeDirection = "right";
         } else if (diffX < -10 || diffY < -14) {
@@ -582,26 +615,39 @@
           return;
         }
 
-        // 上側を触れば上から、下側を触れば下から同じ大きさの角度(±0.22)で綺麗にめくる
         const relY = (startY - rect.top) / rect.height;
         activeCurlAngle = relY >= 0.5 ? 0.22 : -0.22;
 
-        cardBack.style.display = "flex";
-
         if (swipeDirection === "left") {
           const next = getNextData();
-          applyCardStyle(cardBack, indoTextBack, next.data, isPracticeMode, false);
+          curlFrontData = colors[currentIndex];
+          curlFrontShowWord = isAnswerShown;
+          curlBackData = next.data;
+          curlBackShowWord = isPracticeMode;
         } else {
           const prevIdx = getPrevIndex();
-          applyCardStyle(cardBack, indoTextBack, colors[currentIndex], isAnswerShown, false);
-          applyCardStyle(cardFront, indoTextFront, colors[prevIdx], isPracticeMode, false);
+          curlFrontData = colors[prevIdx];
+          curlFrontShowWord = isPracticeMode;
+          curlBackData = colors[currentIndex];
+          curlBackShowWord = isAnswerShown;
         }
+
+        prepareCanvas();
+        const dragSpan = Math.max(220, rect.width * 0.92);
+        if (swipeDirection === "left") {
+          const effectiveDrag = Math.max(-diffX, -diffY * 0.65);
+          currentProgress = Math.max(0, Math.min(0.98, effectiveDrag / dragSpan));
+        } else {
+          currentProgress = Math.max(0.02, Math.min(1, 1 - diffX / dragSpan));
+        }
+
+        renderCurlCanvas(currentProgress, activeCurlAngle);
+        showCurlLayer();
+        return;
       }
 
       const dragSpan = Math.max(220, rect.width * 0.92);
-
       if (swipeDirection === "left") {
-        // 左スワイプでも下から上斜めへのスワイプでも滑らかにめくれる
         const effectiveDrag = Math.max(-diffX, -diffY * 0.65);
         currentProgress = Math.max(0, Math.min(0.98, effectiveDrag / dragSpan));
       } else {
@@ -640,12 +686,12 @@
             currentIndex = next.nextIdx;
             isAnswerShown = isPracticeMode;
             updateFrontCard();
-            resetFlatVisuals();
+            hideCurlLayer();
           });
         } else {
           animateCurl(currentProgress, 0, 200, () => {
             pendingNextDeck = null;
-            resetFlatVisuals();
+            hideCurlLayer();
           });
         }
       } else {
@@ -658,12 +704,12 @@
             currentIndex = prevIdx;
             isAnswerShown = isPracticeMode;
             updateFrontCard();
-            resetFlatVisuals();
+            hideCurlLayer();
           });
         } else {
           animateCurl(currentProgress, 1, 200, () => {
             updateFrontCard();
-            resetFlatVisuals();
+            hideCurlLayer();
           });
         }
       }
@@ -714,7 +760,7 @@
     // シークレットモード切り替え
     function toggleSecretMode() {
       flushPendingFlip();
-      resetFlatVisuals();
+      hideCurlLayer();
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
         colors = [...baseColors];
