@@ -21,43 +21,28 @@
       overflow: hidden;
     }
 
-    /* 上部ヘッダー（カギボタン配置用） */
-    .top-header {
-      display: flex;
-      justify-content: flex-end;
-      padding: 16px 24px 0;
-      height: 60px;
+    /* シークレット切り替えを知らせる控えめな通知（トースト） */
+    .toast {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background-color: rgba(15, 23, 42, 0.85);
+      color: #f8fafc;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 100;
     }
 
-    /* スタイリッシュな丸型カギボタン */
-    .mode-btn {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.8);
-      backdrop-filter: blur(8px);
-      font-size: 1.3rem;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
-      display: none; /* スタート前は非表示 */
-      justify-content: center;
-      align-items: center;
-      transition: background-color 0.2s, transform 0.1s;
-      user-select: none;
-    }
-
-    /* 練習モード（🔓 開いたカギ：爽やかな青） */
-    .mode-btn.practice {
-      background-color: rgba(30, 136, 229, 0.9);
-    }
-
-    /* テストモード（🔒 閉じたカギ：ハッキリした赤） */
-    .mode-btn.test {
-      background-color: rgba(229, 57, 53, 0.9);
-    }
-
-    .mode-btn:active {
-      transform: scale(0.92);
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
     }
 
     /* メインのカードエリア */
@@ -66,7 +51,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 10px 24px 0;
+      padding: 24px 24px 0;
       min-height: 0;
     }
 
@@ -74,7 +59,7 @@
       width: 100%;
       max-width: 650px;
       height: 100%;
-      max-height: 540px;
+      max-height: 580px;
       background-color: transparent;
       border-radius: 28px;
       box-shadow: none;
@@ -127,7 +112,7 @@
       justify-content: center;
       align-items: center;
       gap: 48px;
-      padding: 20px 20px 32px;
+      padding: 24px 20px 32px;
     }
 
     .nav-btn {
@@ -159,36 +144,30 @@
 
     /* 横向き（ランドスケープ）時のレイアウト調整 */
     @media (orientation: landscape) and (max-height: 500px) {
-      .top-header {
-        padding: 10px 24px 0;
-        height: 40px;
-      }
       .card-container {
-        padding: 6px 24px 0;
+        padding: 16px 24px 0;
       }
       .controls {
-        padding: 10px 20px 16px;
+        padding: 14px 20px 16px;
         gap: 60px;
       }
       .nav-btn {
-        width: 50px;
-        height: 50px;
-        font-size: 1.3rem;
+        width: 54px;
+        height: 54px;
+        font-size: 1.4rem;
       }
       .start-tap {
-        font-size: 5.5rem;
+        font-size: 6rem;
       }
       .indonesian-word {
-        font-size: 4.8rem;
+        font-size: 5.4rem;
       }
     }
   </style>
 </head>
 <body>
 
-  <div class="top-header">
-    <button class="mode-btn practice" id="mode-btn" aria-label="Toggle Mode">🔓</button>
-  </div>
+  <div class="toast" id="toast">モード切替</div>
 
   <div class="card-container">
     <div class="card" id="card">
@@ -228,20 +207,31 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true; // 初期状態は練習モード（🔓 解除：青）
+    let isPracticeMode = true; // 初期状態は練習モード
+
+    // 3回タップ検知用の変数
+    let tapCount = 0;
+    let tapTimer = null;
 
     const card = document.getElementById("card");
     const startTap = document.getElementById("start-tap");
     const indoText = document.getElementById("indo-text");
-    const modeBtn = document.getElementById("mode-btn");
+    const toast = document.getElementById("toast");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      setTimeout(() => {
+        toast.classList.remove("show");
+      }, 1200);
+    }
 
     function startQuiz() {
       isStarted = true;
       startTap.style.display = "none";
       indoText.style.display = "block";
-      modeBtn.style.display = "flex"; // スタート後にボタンを表示
       isAnswerShown = isPracticeMode;
       updateCard();
     }
@@ -269,28 +259,32 @@
       }
     }
 
-    // ボタンをクリックするたびに「🔓青（練習）」と「🔒赤（テスト）」が切り替わる
-    modeBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      isPracticeMode = !isPracticeMode;
-      
-      if (isPracticeMode) {
-        modeBtn.className = "mode-btn practice";
-        modeBtn.textContent = "🔓";
-        isAnswerShown = true;
-      } else {
-        modeBtn.className = "mode-btn test";
-        modeBtn.textContent = "🔒";
-        isAnswerShown = false;
-      }
-      updateCard();
-    });
-
-    // カードタップ時
+    // カードのクリック（タップ）イベント
     card.addEventListener("click", () => {
       if (!isStarted) {
         startQuiz();
-      } else if (isPracticeMode) {
+        return;
+      }
+
+      // 3回タップのカウント処理
+      tapCount++;
+      if (tapCount === 1) {
+        tapTimer = setTimeout(() => {
+          if (tapCount < 3) {
+            handleNormalTap();
+          }
+          tapCount = 0;
+        }, 400);
+      } else if (tapCount === 3) {
+        clearTimeout(tapTimer);
+        tapCount = 0;
+        toggleSecretMode(); // 3回タップ達成でシークレット切り替え！
+      }
+    });
+
+    // 通常のタップ動作
+    function handleNormalTap() {
+      if (isPracticeMode) {
         currentIndex++;
         if (currentIndex >= colors.length) {
           colors = shuffleArray(baseColors);
@@ -301,7 +295,20 @@
         isAnswerShown = !isAnswerShown;
         updateCard();
       }
-    });
+    }
+
+    // シークレットモード切り替え（より開き具合がわかる表現に）
+    function toggleSecretMode() {
+      isPracticeMode = !isPracticeMode;
+      if (isPracticeMode) {
+        isAnswerShown = true;
+        showToast("🔓✨ 練習モード (オープン中)");
+      } else {
+        isAnswerShown = false;
+        showToast("🔒 測試モード (ロック中)");
+      }
+      updateCard();
+    }
 
     // 戻るボタン
     prevBtn.addEventListener("click", () => {
