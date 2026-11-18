@@ -280,15 +280,16 @@
     let tapTimer = null;
     let toastTimer = null;
 
-    // 紙めくり制御用
+    // 紙めくり制御用（どこを触っても綺麗な統一角度でめくれる）
+    const UNIFORM_CURL_ANGLE = -0.22;
     let startX = 0;
     let startY = 0;
+    let lastX = 0;
     let dragStartTime = 0;
     let isDragging = false;
     let swipeDirection = null; // "left" | "right" | null
     let justSwiped = false;
     let pendingNextDeck = null;
-    let curlAngle = 0.2;
     let currentProgress = 0; // 0 = 平ら, 1 = 完全にめくれた状態
     let animFrameId = null;
     let pendingCommit = null;
@@ -485,11 +486,10 @@
 
       function step(now) {
         const t = Math.min(1, (now - startTime) / duration);
-        // なめらかな減速イージング
         const ease = 1 - Math.pow(1 - t, 3);
         const p = fromP + (toP - fromP) * ease;
         currentProgress = p;
-        renderCurl(p, curlAngle);
+        renderCurl(p, UNIFORM_CURL_ANGLE);
 
         if (t < 1) {
           animFrameId = requestAnimationFrame(step);
@@ -536,32 +536,30 @@
       flushPendingFlip();
       startX = e.clientX;
       startY = e.clientY;
+      lastX = e.clientX;
       dragStartTime = performance.now();
       isDragging = true;
       swipeDirection = null;
       pendingNextDeck = null;
       currentProgress = 0;
+
+      try {
+        cardFront.setPointerCapture(e.pointerId);
+      } catch (_) {}
     });
 
     cardFront.addEventListener("pointermove", (e) => {
       if (!isDragging || !isStarted) return;
+      lastX = e.clientX;
       const diffX = e.clientX - startX;
-
-      if (Math.abs(diffX) <= 10 && !swipeDirection) return;
-
-      const rect = cardStage.getBoundingClientRect();
+      const diffY = e.clientY - startY;
 
       if (!swipeDirection) {
+        // 横方向への明確なスワイプを検知してからめくり始める
+        if (Math.abs(diffX) <= 14 || Math.abs(diffX) < Math.abs(diffY) * 0.9) return;
+
         swipeDirection = diffX < 0 ? "left" : "right";
         cardBack.style.display = "flex";
-
-        // 指を置いた高さに応じて自然に折り目の角度を決める
-        const relY = Math.max(0, Math.min(1, (startY - rect.top) / rect.height));
-        if (relY >= 0.5) {
-          curlAngle = 0.16 + (relY - 0.5) * 0.42;
-        } else {
-          curlAngle = -0.16 - (0.5 - relY) * 0.42;
-        }
 
         if (swipeDirection === "left") {
           const next = getNextData();
@@ -573,17 +571,19 @@
         }
       }
 
+      const rect = cardStage.getBoundingClientRect();
       const dragSpan = Math.max(220, rect.width * 0.92);
+
       if (swipeDirection === "left") {
         currentProgress = Math.max(0, Math.min(0.98, -diffX / dragSpan));
       } else {
         currentProgress = Math.max(0.02, Math.min(1, 1 - diffX / dragSpan));
       }
 
-      renderCurl(currentProgress, curlAngle);
+      renderCurl(currentProgress, UNIFORM_CURL_ANGLE);
     });
 
-    function endDrag(e) {
+    function finishDrag(isCancelled) {
       if (!isDragging) return;
       isDragging = false;
 
@@ -594,13 +594,13 @@
         justSwiped = false;
       }, 90);
 
-      const diffX = e.clientX - startX;
+      const diffX = lastX - startX;
       const elapsed = Math.max(1, performance.now() - dragStartTime);
       const velocity = Math.abs(diffX) / elapsed;
-      const isQuickFlick = velocity > 0.35 && Math.abs(diffX) > 25;
+      const isQuickFlick = !isCancelled && velocity > 0.35 && Math.abs(diffX) > 25;
 
       if (swipeDirection === "left") {
-        if (diffX < -55 || (diffX < 0 && isQuickFlick)) {
+        if (!isCancelled && (diffX < -55 || (diffX < 0 && isQuickFlick))) {
           const next = getNextData();
           animateCurl(currentProgress, 1, 280, () => {
             if (next.newDeck) colors = next.newDeck;
@@ -617,7 +617,7 @@
           });
         }
       } else {
-        if (diffX > 55 || (diffX > 0 && isQuickFlick)) {
+        if (!isCancelled && (diffX > 55 || (diffX > 0 && isQuickFlick))) {
           const prevIdx = getPrevIndex();
           animateCurl(currentProgress, 0, 280, () => {
             currentIndex = prevIdx;
@@ -634,8 +634,14 @@
       }
     }
 
-    cardFront.addEventListener("pointerup", endDrag);
-    cardFront.addEventListener("pointercancel", endDrag);
+    cardFront.addEventListener("pointerup", (e) => {
+      lastX = e.clientX;
+      finishDrag(false);
+    });
+
+    cardFront.addEventListener("pointercancel", () => {
+      finishDrag(true);
+    });
 
     // 【カードのタップ】文字の表示／非表示を切り替え
     cardFront.addEventListener("click", (e) => {
