@@ -163,10 +163,10 @@
       { hex: "#18181B", indo: "Hitam",   textColor: "#FFFFFF" },
       { hex: "#FFFFFF", indo: "Putih",   textColor: "#1E293B" },
       { hex: "#FB8C00", indo: "Oranye",  textColor: "#FFFFFF" },
-      { hex: "#6D4C41", indo: "Cokelat", textColor: "#FFFFFF" }
+      { hex: "#6D4C41", indo: "Cokelat", textColor: "#FFFFFF" },
+      { hex: "#8E24AA", indo: "Ungu",    textColor: "#FFFFFF" } // 紫を追加
     ];
 
-    // 配列をランダムにシャッフルする関数（Fisher-Yatesアルゴリズム）
     function shuffleArray(array) {
       const arr = [...array];
       for (let i = arr.length - 1; i > 0; i--) {
@@ -224,8 +224,6 @@
     nextBtn.addEventListener("click", () => {
       if (!isStarted) isStarted = true;
       currentIndex = (currentIndex + 1) % colors.length;
-      // 最後のカードから「次へ」で一周した時に新しくシャッフルし直したい場合は、
-      // ここに if (currentIndex === 0) colors = shuffleArray(baseColors); を入れることも可能です
       isAnswerShown = false;
       updateCard();
     });
