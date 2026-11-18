@@ -21,7 +21,7 @@
       overflow: hidden;
     }
 
-    /* 上部ヘッダー（モード切替ボタン配置用） */
+    /* 上部ヘッダー（カギボタン配置用） */
     .top-header {
       display: flex;
       justify-content: flex-end;
@@ -29,31 +29,35 @@
       height: 60px;
     }
 
-    /* モード切替ボタン（プロっぽいガラス調） */
+    /* スタイリッシュな丸型カギボタン */
     .mode-btn {
-      background: rgba(255, 255, 255, 0.45);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.8);
       backdrop-filter: blur(8px);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: #1e293b;
+      font-size: 1.3rem;
       cursor: pointer;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
-      transition: background-color 0.2s, transform 0.1s;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
       display: none; /* スタート前は非表示 */
+      justify-content: center;
       align-items: center;
-      gap: 6px;
+      transition: background-color 0.2s, transform 0.1s;
       user-select: none;
     }
 
-    .mode-btn:hover {
-      background: rgba(255, 255, 255, 0.65);
+    /* 練習モード（🔓 開いたカギ：ハッキリわかる明るいエメラルドグリーン系） */
+    .mode-btn.practice {
+      background-color: rgba(16, 185, 129, 0.9);
+    }
+
+    /* テストモード（🔒 閉じたカギ：重厚なダークスレート系） */
+    .mode-btn.test {
+      background-color: rgba(30, 41, 59, 0.9);
     }
 
     .mode-btn:active {
-      transform: scale(0.95);
+      transform: scale(0.92);
     }
 
     /* メインのカードエリア */
@@ -183,7 +187,7 @@
 <body>
 
   <div class="top-header">
-    <button class="mode-btn" id="mode-btn" aria-label="Toggle Mode">👀</button>
+    <button class="mode-btn practice" id="mode-btn" aria-label="Toggle Mode">🔓</button>
   </div>
 
   <div class="card-container">
@@ -224,7 +228,7 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
-    let isPracticeMode = true; // 初期状態は「練習モード（文字あり）」
+    let isPracticeMode = true; // 初期状態は練習モード（🔓 解除）
 
     const card = document.getElementById("card");
     const startTap = document.getElementById("start-tap");
@@ -237,8 +241,8 @@
       isStarted = true;
       startTap.style.display = "none";
       indoText.style.display = "block";
-      modeBtn.style.display = "flex"; // スタート後に切り替えてボタンを表示
-      isAnswerShown = isPracticeMode; // 練習モードなら最初から表示
+      modeBtn.style.display = "flex"; // スタート後にボタンを表示
+      isAnswerShown = isPracticeMode;
       updateCard();
     }
 
@@ -265,16 +269,18 @@
       }
     }
 
-    // モード切替ボタンのクリックイベント
+    // ボタンをクリックするたびに「🔓緑（解除）」と「🔒ダーク（ロック）」がハッキリ切り替わる
     modeBtn.addEventListener("click", (e) => {
-      e.stopPropagation(); // カードタップの誤爆を防ぐ
+      e.stopPropagation();
       isPracticeMode = !isPracticeMode;
       
       if (isPracticeMode) {
-        modeBtn.textContent = "👀 練習モード";
+        modeBtn.className = "mode-btn practice";
+        modeBtn.textContent = "🔓";
         isAnswerShown = true;
       } else {
-        modeBtn.textContent = "❓ テストモード";
+        modeBtn.className = "mode-btn test";
+        modeBtn.textContent = "🔒";
         isAnswerShown = false;
       }
       updateCard();
@@ -285,7 +291,6 @@
       if (!isStarted) {
         startQuiz();
       } else if (isPracticeMode) {
-        // 練習モードの時は、タップで次の色に進むとテンポが良い
         currentIndex++;
         if (currentIndex >= colors.length) {
           colors = shuffleArray(baseColors);
@@ -293,7 +298,6 @@
         }
         updateCard();
       } else {
-        // テストモードの時は、タップで答えの表示/非表示を切り替え
         isAnswerShown = !isAnswerShown;
         updateCard();
       }
