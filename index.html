@@ -21,21 +21,56 @@
       overflow: hidden;
     }
 
+    /* 上部ヘッダー（モード切替ボタン配置用） */
+    .top-header {
+      display: flex;
+      justify-content: flex-end;
+      padding: 16px 24px 0;
+      height: 60px;
+    }
+
+    /* モード切替ボタン（プロっぽいガラス調） */
+    .mode-btn {
+      background: rgba(255, 255, 255, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(8px);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #1e293b;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+      transition: background-color 0.2s, transform 0.1s;
+      display: none; /* スタート前は非表示 */
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+
+    .mode-btn:hover {
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    .mode-btn:active {
+      transform: scale(0.95);
+    }
+
+    /* メインのカードエリア */
     .card-container {
       flex: 1;
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 28px 24px 0;
+      padding: 10px 24px 0;
       min-height: 0;
     }
 
-    /* スタート前は透明・枠なしで背景色と一体化 */
     .card {
       width: 100%;
       max-width: 650px;
       height: 100%;
-      max-height: 580px;
+      max-height: 540px;
       background-color: transparent;
       border-radius: 28px;
       box-shadow: none;
@@ -82,12 +117,13 @@
       transition: opacity 0.2s ease;
     }
 
+    /* 下部の矢印ボタンエリア */
     .controls {
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 48px;
-      padding: 24px 20px 32px;
+      padding: 20px 20px 32px;
     }
 
     .nav-btn {
@@ -117,29 +153,38 @@
       background-color: rgba(255, 255, 255, 0.8);
     }
 
+    /* 横向き（ランドスケープ）時のレイアウト調整 */
     @media (orientation: landscape) and (max-height: 500px) {
+      .top-header {
+        padding: 10px 24px 0;
+        height: 40px;
+      }
       .card-container {
-        padding: 16px 24px 0;
+        padding: 6px 24px 0;
       }
       .controls {
-        padding: 14px 20px 16px;
+        padding: 10px 20px 16px;
         gap: 60px;
       }
       .nav-btn {
-        width: 54px;
-        height: 54px;
-        font-size: 1.4rem;
+        width: 50px;
+        height: 50px;
+        font-size: 1.3rem;
       }
       .start-tap {
-        font-size: 6rem;
+        font-size: 5.5rem;
       }
       .indonesian-word {
-        font-size: 5.4rem;
+        font-size: 4.8rem;
       }
     }
   </style>
 </head>
 <body>
+
+  <div class="top-header">
+    <button class="mode-btn" id="mode-btn" aria-label="Toggle Mode">👀</button>
+  </div>
 
   <div class="card-container">
     <div class="card" id="card">
@@ -179,10 +224,12 @@
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
+    let isPracticeMode = true; // 初期状態は「練習モード（文字あり）」
 
     const card = document.getElementById("card");
     const startTap = document.getElementById("start-tap");
     const indoText = document.getElementById("indo-text");
+    const modeBtn = document.getElementById("mode-btn");
     const prevBtn = document.getElementById("prev-btn");
     const nextBtn = document.getElementById("next-btn");
 
@@ -190,7 +237,8 @@
       isStarted = true;
       startTap.style.display = "none";
       indoText.style.display = "block";
-      isAnswerShown = false;
+      modeBtn.style.display = "flex"; // スタート後に切り替えてボタンを表示
+      isAnswerShown = isPracticeMode; // 練習モードなら最初から表示
       updateCard();
     }
 
@@ -207,35 +255,62 @@
         card.style.boxShadow = "0 18px 36px rgba(15, 23, 42, 0.22), inset 0 0 0 2px rgba(255, 255, 255, 0.35)";
       }
 
-      if (!isAnswerShown) {
-        indoText.classList.remove("visible");
-        indoText.textContent = "";
-      } else {
-        indoText.textContent = current.indo;
-        indoText.style.color = current.textColor;
+      indoText.textContent = current.indo;
+      indoText.style.color = current.textColor;
+
+      if (isAnswerShown) {
         indoText.classList.add("visible");
+      } else {
+        indoText.classList.remove("visible");
       }
     }
 
+    // モード切替ボタンのクリックイベント
+    modeBtn.addEventListener("click", (e) => {
+      e.stopPropagation(); // カードタップの誤爆を防ぐ
+      isPracticeMode = !isPracticeMode;
+      
+      if (isPracticeMode) {
+        modeBtn.textContent = "👀 練習モード";
+        isAnswerShown = true;
+      } else {
+        modeBtn.textContent = "❓ テストモード";
+        isAnswerShown = false;
+      }
+      updateCard();
+    });
+
+    // カードタップ時
     card.addEventListener("click", () => {
       if (!isStarted) {
         startQuiz();
+      } else if (isPracticeMode) {
+        // 練習モードの時は、タップで次の色に進むとテンポが良い
+        currentIndex++;
+        if (currentIndex >= colors.length) {
+          colors = shuffleArray(baseColors);
+          currentIndex = 0;
+        }
+        updateCard();
       } else {
+        // テストモードの時は、タップで答えの表示/非表示を切り替え
         isAnswerShown = !isAnswerShown;
         updateCard();
       }
     });
 
+    // 戻るボタン
     prevBtn.addEventListener("click", () => {
       if (!isStarted) {
         startQuiz();
         return;
       }
       currentIndex = (currentIndex - 1 + colors.length) % colors.length;
-      isAnswerShown = false;
+      isAnswerShown = isPracticeMode;
       updateCard();
     });
 
+    // 次へボタン
     nextBtn.addEventListener("click", () => {
       if (!isStarted) {
         startQuiz();
@@ -246,7 +321,7 @@
         colors = shuffleArray(baseColors);
         currentIndex = 0;
       }
-      isAnswerShown = false;
+      isAnswerShown = isPracticeMode;
       updateCard();
     });
   </script>
