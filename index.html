@@ -96,7 +96,7 @@
       text-align: center;
       opacity: 0;
       visibility: hidden;
-      transition: opacity 0.2s ease; /* 練習モード時のスムーズな切り替え用 */
+      transition: opacity 0.2s ease;
       pointer-events: none;
     }
 
@@ -202,13 +202,13 @@
       return arr;
     }
 
-    let colors = [...baseColors]; // 初期状態は順番通り
+    let colors = [...baseColors];
     let currentIndex = 0;
     let isStarted = false;
     let isAnswerShown = false;
     let isPracticeMode = true; // 初期状態は練習モード（順番通り）
 
-    // 3回タップ検知用の変数（遅延判定を0.3秒に短縮して反応を高速化）
+    // 3回タップ検知用の変数
     let tapCount = 0;
     let tapTimer = null;
 
@@ -251,7 +251,6 @@
       indoText.textContent = current.indo;
       indoText.style.color = current.textColor;
 
-      // テストモード時はアニメーションを無効化してラグを完全に排除
       if (!isPracticeMode) {
         indoText.style.transition = 'none';
       } else {
@@ -265,22 +264,39 @@
       }
     }
 
-    // カードのクリック（タップ）イベント
-    card.addEventListener("click", () => {
+    // 【カード専用の通常のタップ】
+    card.addEventListener("click", (e) => {
+      e.stopPropagation(); // 背景へのイベント伝播を防止
       if (!isStarted) {
         startQuiz();
         return;
       }
 
-      // 3回タップのカウント処理（判定を0.3秒にしてキビキビ動作）
+      if (isPracticeMode) {
+        currentIndex++;
+        if (currentIndex >= colors.length) {
+          currentIndex = 0;
+        }
+        isAnswerShown = isPracticeMode;
+        updateCard();
+      } else {
+        isAnswerShown = !isAnswerShown;
+        updateCard();
+      }
+    });
+
+    // 【画面外（背景・余白部分）の3回タップ検知】
+    document.body.addEventListener("click", (e) => {
+      // カードや矢印ボタンをクリックした場合は背景のカウントをしない
+      if (e.target.closest('#card') || e.target.closest('.controls')) {
+        return;
+      }
+
       tapCount++;
       if (tapCount === 1) {
         tapTimer = setTimeout(() => {
-          if (tapCount < 3) {
-            handleNormalTap();
-          }
           tapCount = 0;
-        }, 300);
+        }, 350);
       } else if (tapCount === 3) {
         clearTimeout(tapTimer);
         tapCount = 0;
@@ -288,41 +304,28 @@
       }
     });
 
-    // 通常のタップ動作
-    function handleNormalTap() {
-      currentIndex++;
-      if (currentIndex >= colors.length) {
-        currentIndex = 0;
-        // テストモード時のみ、一周したら再度シャッフルする
-        if (!isPracticeMode) {
-          colors = shuffleArray(baseColors);
-        }
-      }
-      isAnswerShown = isPracticeMode;
-      updateCard();
-    }
-
     // シークレットモード切り替え
     function toggleSecretMode() {
       isPracticeMode = !isPracticeMode;
       if (isPracticeMode) {
-        // 練習モードに切り替えたときは、順番通りのリストに戻す
         colors = [...baseColors];
         currentIndex = 0;
         isAnswerShown = true;
         showToast("🔓✨ Practice Mode (Unlocked)");
       } else {
-        // テストモードに切り替えたときはシャッフルする
         colors = shuffleArray(baseColors);
         currentIndex = 0;
         isAnswerShown = false;
         showToast("🔒 Test Mode (Locked)");
       }
-      updateCard();
+      if (isStarted) {
+        updateCard();
+      }
     }
 
     // 戻るボタン
-    prevBtn.addEventListener("click", () => {
+    prevBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (!isStarted) {
         startQuiz();
         return;
@@ -333,7 +336,8 @@
     });
 
     // 次へボタン
-    nextBtn.addEventListener("click", () => {
+    nextBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
       if (!isStarted) {
         startQuiz();
         return;
